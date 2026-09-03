@@ -1,1223 +1,696 @@
-import streamlit as st
 import pandas as pd
 import numpy as np
-import io
+import re
 
 
 # ============================================================
-# MAIN FLOW
+# GENERAL HELPERS
 # ============================================================
 
-def run_processing_flow(
-    raw_df,
-    analysis_df,
+def get_question_metadata(
     metadata,
-    platform
+    question
 ):
-
-
-    tabs = st.tabs([
-        "1. Data Overview",
-        "2. Duplicate",
-        "3. Routing Variable",
-        "4. Crossing Tab",
-        "5. Analyze Result",
-        "6. Download Result"
-    ])
-
-
-    # ========================================================
-    # TAB 1 — DATA OVERVIEW
-    # ========================================================
-
-    with tabs[0]:
-
-        show_data_overview(
-            raw_df,
-            metadata,
-            platform
-        )
-
-
-    # ========================================================
-    # TAB 2 — DUPLICATE
-    # ========================================================
-
-    with tabs[1]:
-
-        analysis_df = duplicate_section(
-            analysis_df,
-            metadata
-        )
-
-        st.session_state["analysis_df"] = analysis_df
-
-
-    # ========================================================
-    # TAB 3 — ROUTING
-    # ========================================================
-
-    with tabs[2]:
-
-        routing_section(
-            metadata
-        )
-
-
-    # ========================================================
-    # TAB 4 — CROSSING TAB
-    # ========================================================
-
-    with tabs[3]:
-
-        crosstab_section(
-            analysis_df,
-            metadata
-        )
-
-
-    # ========================================================
-    # TAB 5 — ANALYZE RESULT
-    # ========================================================
-
-    with tabs[4]:
-
-        analyze_section(
-            analysis_df,
-            metadata
-        )
-
-
-    # ========================================================
-    # TAB 6 — DOWNLOAD
-    # ========================================================
-
-    with tabs[5]:
-
-        download_section(
-            raw_df,
-            analysis_df,
-            metadata
-        )
-
-
-# ============================================================
-# DATA OVERVIEW
-# ============================================================
-
-def show_data_overview(
-    raw_df,
-    metadata,
-    platform
-):
-
-    st.subheader("Data Overview")
-
-
-    # --------------------------------------------------------
-    # ROW COUNT
-    # --------------------------------------------------------
-
-    total_rows = len(raw_df)
-
-    if platform == "SurveyMonkey":
-
-        respondent_count = max(
-            total_rows - 2,
-            0
-        )
-
-    else:
-
-        respondent_count = max(
-            total_rows - 1,
-            0
-        )
-
-
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric(
-        "Platform",
-        platform
-    )
-
-    col2.metric(
-        "Respondents",
-        respondent_count
-    )
-
-    col3.metric(
-        "Total Questions",
-        len(metadata)
-    )
-
-
-    # --------------------------------------------------------
-    # QUESTION OVERVIEW
-    # --------------------------------------------------------
-
-    st.markdown("### Question Overview")
-
-
-    overview = []
 
     for item in metadata:
 
-        overview.append({
+        if item["question"] == question:
 
-            "Question":
-                item["question"],
+            return item
 
-            "Type":
-                item["type"],
-
-            "Number of Options":
-                len(item["options"])
-
-        })
+    return None
 
 
-    st.dataframe(
-        pd.DataFrame(overview),
-        use_container_width=True
+def normalize_text(value):
+
+    if pd.isna(value):
+
+        return ""
+
+    text = str(value)
+
+    text = text.lower()
+
+    text = re.sub(
+        r"\s+",
+        " ",
+        text
     )
 
-
-    # --------------------------------------------------------
-    # RAW PREVIEW
-    # --------------------------------------------------------
-
-    st.markdown("### Raw Data Preview")
-
-    # PENTING:
-    # raw_df langsung ditampilkan
-    # sehingga SurveyMonkey tetap mempertahankan
-    # struktur MultiIndex header.
-
-    st.dataframe(
-        raw_df.head(5),
-        use_container_width=True
-    )
+    return text.strip()
 
 
 # ============================================================
-# DUPLICATE
+# ROUTING
 # ============================================================
 
-def duplicate_section(
+def get_filtered_df(
     df,
-    metadata
+    question,
+    metadata,
+    routing_config
 ):
 
-    st.subheader("Duplicate")
+    if not routing_config:
+        return df.copy()
 
+    if question not in routing_config:
+        return df.copy()
 
-    # --------------------------------------------------------
-    # LOGICAL QUESTION DROPDOWN
-    # --------------------------------------------------------
+    config = routing_config[question]
 
-    question_list = [
-        item["question"]
-        for item in metadata
-    ]
+    if not config:
+        return df.copy()
 
-
-    selected_keys = st.multiselect(
-        "Pilih variabel duplicate key",
-        question_list
+    base_question = config.get(
+        "base_question"
     )
 
+    selected_values = config.get(
+        "values",
+        []
+    )
 
-    if not selected_keys:
+    if (
+        not base_question
+        or base_question == "All Respondents"
+    ):
 
-        st.info(
-            "Pilih minimal satu variabel."
+        return df.copy()
+
+    if not selected_values:
+
+        return df.copy()
+
+    base_metadata = get_question_metadata(
+        metadata,
+        base_question
+    )
+
+    if base_metadata is None:
+
+        return df.copy()
+
+    # ========================================================
+    # SA
+    # ========================================================
+
+    if base_metadata["type"] == "SA":
+
+        column = base_metadata[
+            "source_column"
+        ]
+
+        if column not in df.columns:
+
+            return df.copy()
+
+        series = (
+            df[column]
+            .fillna("")
+            .astype(str)
+            .str.strip()
         )
 
-        return df
+        return df[
+            series.isin(
+                [
+                    str(x)
+                    for x in selected_values
+                ]
+            )
+        ].copy()
 
+    # ========================================================
+    # MA
+    # ========================================================
 
-    # --------------------------------------------------------
-    # BUILD DUPLICATE KEY
-    # --------------------------------------------------------
+    if base_metadata["type"] == "MA":
 
-    temp_df = df.copy()
+        options = base_metadata["options"]
 
-    key_columns = []
-
-
-    for question in selected_keys:
-
-        item = next(
-            x for x in metadata
-            if x["question"] == question
+        internal_columns = (
+            base_metadata["internal_columns"]
         )
 
+        selected_columns = []
 
-        if item["type"] == "MA":
+        for value in selected_values:
 
-            # Semua option MA digunakan
-            # sebagai bagian dari duplicate key
+            if value not in options:
+                continue
 
-            ma_cols = [
-                col
-                for col in df.columns
-                if col.startswith(
-                    question + "__"
-                )
-            ]
+            index = options.index(value)
 
-            key_columns.extend(
-                ma_cols
+            if index < len(internal_columns):
+
+                column = internal_columns[index]
+
+                if column in df.columns:
+
+                    selected_columns.append(
+                        column
+                    )
+
+        if not selected_columns:
+
+            return df.copy()
+
+        mask = (
+            df[selected_columns]
+            .fillna(0)
+            .apply(
+                pd.to_numeric,
+                errors="coerce"
+            )
+            .fillna(0)
+            .sum(axis=1)
+            > 0
+        )
+
+        return df[mask].copy()
+
+    return df.copy()
+
+
+# ============================================================
+# VARIABLE ANALYSIS
+# ============================================================
+
+def calculate_variable_analysis(
+    df,
+    metadata_item
+):
+
+    question = metadata_item["question"]
+
+    question_type = metadata_item["type"]
+
+    # ========================================================
+    # SA
+    # ========================================================
+
+    if question_type == "SA":
+
+        column = metadata_item["source_column"]
+
+        if column not in df.columns:
+
+            return {
+                "question": question,
+                "type": "SA",
+                "base_n": 0,
+                "result": pd.DataFrame()
+            }
+
+        series = (
+            df[column]
+            .dropna()
+            .astype(str)
+            .str.strip()
+        )
+
+        series = series[
+            series != ""
+        ]
+
+        base_n = len(series)
+
+        result = (
+            series
+            .value_counts()
+            .rename_axis("Option")
+            .reset_index(
+                name="Absolute"
+            )
+        )
+
+        if base_n > 0:
+
+            result["Percentage"] = (
+                result["Absolute"]
+                / base_n
+                * 100
             )
 
         else:
 
-            if question in df.columns:
+            result["Percentage"] = 0
 
-                key_columns.append(
-                    question
-                )
+        return {
+            "question": question,
+            "type": "SA",
+            "base_n": base_n,
+            "result": result
+        }
 
+    # ========================================================
+    # MA
+    # ========================================================
 
-    if not key_columns:
+    if question_type == "MA":
 
-        st.warning(
-            "Kolom duplicate key tidak ditemukan."
+        options = metadata_item["options"]
+
+        internal_columns = (
+            metadata_item["internal_columns"]
         )
 
-        return df
+        base_n = len(df)
 
+        rows = []
 
-    # --------------------------------------------------------
-    # JANGAN ANGGAP BLANK SEBAGAI DUPLICATE
-    # --------------------------------------------------------
+        for index, option in enumerate(options):
 
-    valid_key = temp_df[
-        key_columns
-    ].notna().any(axis=1)
+            if index >= len(internal_columns):
+                continue
 
+            column = internal_columns[index]
 
-    duplicate_mask = (
-        temp_df[
-            key_columns
+            if column not in df.columns:
+                continue
+
+            values = pd.to_numeric(
+                df[column],
+                errors="coerce"
+            ).fillna(0)
+
+            absolute = int(values.sum())
+
+            percentage = (
+                absolute / base_n * 100
+                if base_n > 0
+                else 0
+            )
+
+            rows.append(
+                {
+                    "Option": option,
+                    "Absolute": absolute,
+                    "Percentage": percentage
+                }
+            )
+
+        return {
+            "question": question,
+            "type": "MA",
+            "base_n": base_n,
+            "result": pd.DataFrame(rows)
+        }
+
+    # ========================================================
+    # OPEN
+    # ========================================================
+
+    if question_type == "Open":
+
+        column = metadata_item["source_column"]
+
+        if column not in df.columns:
+
+            return {
+                "question": question,
+                "type": "Open",
+                "base_n": 0,
+                "result": pd.DataFrame()
+            }
+
+        series = (
+            df[column]
+            .dropna()
+            .astype(str)
+            .str.strip()
+        )
+
+        series = series[
+            series != ""
         ]
+
+        return {
+            "question": question,
+            "type": "Open",
+            "base_n": len(series),
+            "result": pd.DataFrame(
+                {
+                    "Open Feedback": series
+                }
+            )
+        }
+
+    return {
+        "question": question,
+        "type": question_type,
+        "base_n": 0,
+        "result": pd.DataFrame()
+    }
+
+
+# ============================================================
+# CROSSTAB
+# ============================================================
+
+def find_ma_option_column(
+    metadata_item,
+    option
+):
+
+    options = metadata_item["options"]
+
+    internal_columns = (
+        metadata_item["internal_columns"]
+    )
+
+    if option not in options:
+
+        return None
+
+    index = options.index(option)
+
+    if index >= len(internal_columns):
+
+        return None
+
+    return internal_columns[index]
+
+
+def calculate_crosstab(
+    df,
+    row_metadata,
+    column_metadata,
+    column_option=None
+):
+
+    row_type = row_metadata["type"]
+
+    column_type = column_metadata["type"]
+
+    if (
+        row_type == "MA"
+        and column_type == "MA"
+    ):
+
+        raise ValueError(
+            "MA × MA analysis cannot be performed."
+        )
+
+    if (
+        row_type == "MA"
+        and column_type == "SA"
+    ):
+
+        raise ValueError(
+            "MA × SA is not supported. "
+            "Please use SA as Row Variable "
+            "and MA as Column Variable."
+        )
+
+    if (
+        row_type == "Open"
+        or column_type == "Open"
+    ):
+
+        raise ValueError(
+            "Open-ended questions cannot be used "
+            "in a crosstab."
+        )
+
+    row_column = row_metadata["source_column"]
+
+    if row_column not in df.columns:
+
+        return {
+            "absolute": pd.DataFrame(),
+            "percentage": pd.DataFrame(),
+            "base_n": 0
+        }
+
+    row_series = (
+        df[row_column]
         .fillna("")
         .astype(str)
-        .astype(str)
-        .duplicated(
-            keep=False
+        .str.strip()
+    )
+
+    # ========================================================
+    # SA × SA
+    # ========================================================
+
+    if column_type == "SA":
+
+        column_column = (
+            column_metadata["source_column"]
         )
+
+        if column_column not in df.columns:
+
+            return {
+                "absolute": pd.DataFrame(),
+                "percentage": pd.DataFrame(),
+                "base_n": 0
+            }
+
+        column_series = (
+            df[column_column]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+        )
+
+        mask = (
+            (row_series != "")
+            &
+            (column_series != "")
+        )
+
+        row_series = row_series[mask]
+
+        column_series = column_series[mask]
+
+        result = pd.crosstab(
+            row_series,
+            column_series
+        )
+
+    # ========================================================
+    # SA × MA
+    # ========================================================
+
+    elif column_type == "MA":
+
+        if not column_option:
+
+            raise ValueError(
+                "Please select an MA option."
+            )
+
+        ma_column = find_ma_option_column(
+            column_metadata,
+            column_option
+        )
+
+        if ma_column is None:
+
+            return {
+                "absolute": pd.DataFrame(),
+                "percentage": pd.DataFrame(),
+                "base_n": 0
+            }
+
+        ma_series = (
+            pd.to_numeric(
+                df[ma_column],
+                errors="coerce"
+            )
+            .fillna(0)
+        )
+
+        mask = row_series != ""
+
+        row_series = row_series[mask]
+
+        ma_series = ma_series[mask]
+
+        result = pd.crosstab(
+            row_series,
+            ma_series
+        )
+
+        if 1 in result.columns:
+
+            result = result[[1]]
+
+            result.columns = [
+                column_option
+            ]
+
+        else:
+
+            result = pd.DataFrame(
+                0,
+                index=result.index,
+                columns=[column_option]
+            )
+
+    else:
+
+        raise ValueError(
+            "Unsupported crosstab combination."
+        )
+
+    base_n = len(row_series)
+
+    if base_n > 0:
+
+        percentage = (
+            result
+            / base_n
+            * 100
+        )
+
+    else:
+
+        percentage = result.copy()
+
+    return {
+        "absolute": result,
+        "percentage": percentage,
+        "base_n": base_n
+    }
+
+
+# ============================================================
+# OPEN FEEDBACK
+# ============================================================
+
+def collect_open_feedback(
+    df,
+    metadata_item
+):
+
+    if metadata_item["type"] != "Open":
+
+        return pd.DataFrame(
+            columns=[
+                "Question",
+                "Open Feedback"
+            ]
+        )
+
+    column = metadata_item["source_column"]
+
+    if column not in df.columns:
+
+        return pd.DataFrame(
+            columns=[
+                "Question",
+                "Open Feedback"
+            ]
+        )
+
+    series = (
+        df[column]
+        .dropna()
+        .astype(str)
+        .str.strip()
+    )
+
+    series = series[
+        series != ""
+    ]
+
+    return pd.DataFrame(
+        {
+            "Question":
+                metadata_item["question"],
+
+            "Open Feedback":
+                series
+        }
     )
 
 
-    duplicate_mask = (
-        duplicate_mask &
-        valid_key
+# ============================================================
+# DUPLICATE DETECTION
+# ============================================================
+
+def detect_open_duplicates(
+    df,
+    metadata_item
+):
+
+    if metadata_item["type"] != "Open":
+
+        return pd.DataFrame()
+
+    column = metadata_item["source_column"]
+
+    if column not in df.columns:
+
+        return pd.DataFrame()
+
+    working = pd.DataFrame(
+        {
+            "_original_index":
+                df.index,
+
+            "Response":
+                df[column]
+        }
     )
 
+    working["_normalized_answer"] = (
+        working["Response"]
+        .apply(normalize_text)
+    )
 
-    duplicate_rows = (
-        temp_df[
-            duplicate_mask
+    working = working[
+        working["_normalized_answer"] != ""
+    ].copy()
+
+    if working.empty:
+
+        return pd.DataFrame()
+
+    counts = (
+        working["_normalized_answer"]
+        .value_counts()
+    )
+
+    duplicate_values = (
+        counts[counts > 1].index
+    )
+
+    if len(duplicate_values) == 0:
+
+        return pd.DataFrame()
+
+    duplicate_df = (
+        working[
+            working["_normalized_answer"].isin(
+                duplicate_values
+            )
         ]
         .copy()
     )
 
-
-    if duplicate_rows.empty:
-
-        st.success(
-            "Tidak ditemukan duplicate."
-        )
-
-        return df
-
-
-    # --------------------------------------------------------
-    # DUPLICATE GROUP
-    # --------------------------------------------------------
-
-    duplicate_rows[
-        "_duplicate_group"
-    ] = (
-        duplicate_rows[
-            key_columns
-        ]
-        .fillna("")
-        .astype(str)
-        .agg(
-            " | ".join,
-            axis=1
-        )
-    )
-
-
-    st.write(
-        f"Ditemukan "
-        f"**{len(duplicate_rows)}** "
-        f"baris duplicate."
-    )
-
-
-    # --------------------------------------------------------
-    # PREVIEW
-    # --------------------------------------------------------
-
-    st.dataframe(
-        duplicate_rows,
-        use_container_width=True
-    )
-
-
-    # --------------------------------------------------------
-    # ROW SELECTION
-    # --------------------------------------------------------
-
-    row_indices = duplicate_rows.index.tolist()
-
-
-    selected_rows = st.multiselect(
-        "Pilih row yang ingin dihapus",
-        row_indices
-    )
-
-
-    if st.button(
-        "🗑️ Execute Delete",
-        key="delete_duplicate"
-    ):
-
-        if not selected_rows:
-
-            st.warning(
-                "Belum ada row yang dipilih."
-            )
-
-        else:
-
-            df = df.drop(
-                index=selected_rows
-            ).reset_index(
-                drop=True
-            )
-
-            st.success(
-                f"{len(selected_rows)} "
-                f"row berhasil dihapus."
-            )
-
-            st.rerun()
-
-
-    return df
-
-
-# ============================================================
-# ROUTING VARIABLE
-# ============================================================
-
-def routing_section(metadata):
-
-    st.subheader(
-        "Routing Variable"
-    )
-
-
-    logical_questions = [
-        item["question"]
-        for item in metadata
-    ]
-
-
-    # Session state
-    if "routing" not in st.session_state:
-
-        st.session_state[
-            "routing"
-        ] = {}
-
-
-    for item in metadata:
-
-        question = item["question"]
-
-        q_type = item["type"]
-
-        st.markdown(
-            f"### {question}"
-        )
-
-        st.caption(
-            f"Type: {q_type}"
-        )
-
-
-        # ----------------------------------------------------
-        # BASE QUESTION
-        # ----------------------------------------------------
-
-        base_options = [
-            "Semua Responden"
-        ] + logical_questions
-
-
-        base = st.selectbox(
-            "Base / Routing Question",
-            base_options,
-            key=f"routing_base_{question}"
-        )
-
-
-        # ----------------------------------------------------
-        # ROUTING VALUE
-        # ----------------------------------------------------
-
-        if base != "Semua Responden":
-
-            base_item = next(
-                x for x in metadata
-                if x["question"] == base
-            )
-
-
-            routing_values = (
-                base_item["options"]
-            )
-
-
-            values = st.multiselect(
-                "Pilih routing value",
-                routing_values,
-                key=f"routing_values_{question}"
-            )
-
-        else:
-
-            values = []
-
-
-        st.session_state[
-            "routing"
-        ][question] = {
-
-            "base":
-                base,
-
-            "values":
-                values
-        }
-
-
-# ============================================================
-# CROSSING TAB
-# ============================================================
-
-def crosstab_section(
-    df,
-    metadata
-):
-
-    st.subheader(
-        "Crossing Tab"
-    )
-
-
-    # --------------------------------------------------------
-    # BUILD CROSSING OPTIONS
-    # --------------------------------------------------------
-
-    crossing_options = []
-
-
-    for item in metadata:
-
-        question = item["question"]
-
-        if item["type"] == "MA":
-
-            # MA → OPTION TERPISAH
-
-            for option in item["options"]:
-
-                crossing_options.append({
-                    "label":
-                        f"{question} - {option}",
-
-                    "question":
-                        question,
-
-                    "type":
-                        "MA",
-
-                    "option":
-                        option
-                })
-
-        else:
-
-            crossing_options.append({
-                "label":
-                    question,
-
-                "question":
-                    question,
-
-                "type":
-                    "SA",
-
-                "option":
-                    None
-            })
-
-
-    labels = [
-        x["label"]
-        for x in crossing_options
-    ]
-
-
-    # --------------------------------------------------------
-    # ROW / COLUMN
-    # --------------------------------------------------------
-
-    row_label = st.selectbox(
-        "Row Variable",
-        labels,
-        key="cross_row"
-    )
-
-
-    col_label = st.selectbox(
-        "Column Variable",
-        labels,
-        key="cross_col"
-    )
-
-
-    row_var = next(
-        x for x in crossing_options
-        if x["label"] == row_label
-    )
-
-
-    col_var = next(
-        x for x in crossing_options
-        if x["label"] == col_label
-    )
-
-
-    # --------------------------------------------------------
-    # VALIDATION
-    # --------------------------------------------------------
-
-    row_type = row_var["type"]
-    col_type = col_var["type"]
-
-
-    # MA × MA
-    if row_type == "MA" and col_type == "MA":
-
-        st.error(
-            "Crosstab MA × MA tidak dapat dilakukan. "
-            "Silakan pilih kombinasi SA × SA "
-            "atau SA × MA."
-        )
-
-        return
-
-
-    # MA × SA
-    if row_type == "MA" and col_type == "SA":
-
-        st.warning(
-            "Gunakan SA sebagai Row Variable "
-            "dan MA sebagai Column Variable."
-        )
-
-        return
-
-
-    # --------------------------------------------------------
-    # METRICS
-    # --------------------------------------------------------
-
-    metrics = st.multiselect(
-        "Pilih hasil yang ditampilkan",
-        [
-            "Absolute",
-            "Percentage"
-        ],
-        default=[
-            "Absolute",
-            "Percentage"
-        ]
-    )
-
-
-    if st.button(
-        "Generate Crosstab",
-        key="generate_crosstab"
-    ):
-
-        result = calculate_crosstab(
-            df,
-            row_var,
-            col_var,
-            metadata
-        )
-
-
-        st.session_state[
-            "crosstab_result"
-        ] = result
-
-
-    # --------------------------------------------------------
-    # DISPLAY
-    # --------------------------------------------------------
-
-    if (
-        "crosstab_result"
-        in st.session_state
-    ):
-
-        result = (
-            st.session_state[
-                "crosstab_result"
-            ]
-        )
-
-
-        st.dataframe(
-            result,
-            use_container_width=True
-        )
-
-
-# ============================================================
-# CALCULATE CROSSTAB
-# ============================================================
-
-def calculate_crosstab(
-    df,
-    row_var,
-    col_var,
-    metadata
-):
-
-    # --------------------------------------------------------
-    # ROW
-    # --------------------------------------------------------
-
-    if row_var["type"] == "SA":
-
-        row_series = df[
-            row_var["question"]
-        ].fillna("Blank")
-
-    else:
-
-        row_col = (
-            f'{row_var["question"]}__'
-            f'{row_var["option"]}'
-        )
-
-        row_series = df[
-            row_col
-        ]
-
-
-    # --------------------------------------------------------
-    # COLUMN
-    # --------------------------------------------------------
-
-    if col_var["type"] == "SA":
-
-        col_series = df[
-            col_var["question"]
-        ].fillna("Blank")
-
-
-    else:
-
-        col_col = (
-            f'{col_var["question"]}__'
-            f'{col_var["option"]}'
-        )
-
-        col_series = df[
-            col_col
-        ]
-
-
-    # --------------------------------------------------------
-    # SA × SA
-    # --------------------------------------------------------
-
-    if (
-        row_var["type"] == "SA"
-        and
-        col_var["type"] == "SA"
-    ):
-
-        result = pd.crosstab(
-            row_series,
-            col_series
-        )
-
-
-    # --------------------------------------------------------
-    # SA × MA
-    # --------------------------------------------------------
-
-    elif (
-        row_var["type"] == "SA"
-        and
-        col_var["type"] == "MA"
-    ):
-
-        temp = pd.DataFrame({
-
-            "row":
-                row_series,
-
-            "ma":
-                col_series
-
-        })
-
-
-        result = pd.crosstab(
-            temp["row"],
-            temp["ma"]
-        )
-
-
-    else:
+    if duplicate_df.empty:
 
         return pd.DataFrame()
 
+    group_mapping = {
+        value: index + 1
+        for index, value
+        in enumerate(duplicate_values)
+    }
 
-    return result
-
-
-# ============================================================
-# ANALYZE RESULT
-# ============================================================
-
-def analyze_section(
-    df,
-    metadata
-):
-
-    st.subheader(
-        "Analyze Result"
+    duplicate_df["Duplicate Group"] = (
+        duplicate_df["_normalized_answer"]
+        .map(group_mapping)
     )
 
-
-    question_options = [
-        item["question"]
-        for item in metadata
-    ]
-
-
-    selected_question = st.selectbox(
-        "Pilih pertanyaan",
-        question_options
+    duplicate_df["Duplicate Count"] = (
+        duplicate_df["_normalized_answer"]
+        .map(counts)
     )
 
-
-    item = next(
-        x for x in metadata
-        if x["question"]
-        == selected_question
-    )
-
-
-    metrics = st.multiselect(
-        "Pilih metric",
-        [
-            "Absolute",
-            "Percentage",
-            "Average"
-        ],
-        default=[
-            "Absolute",
-            "Percentage"
-        ]
-    )
-
-
-    # --------------------------------------------------------
-    # OPEN
-    # --------------------------------------------------------
-
-    if item["type"] == "Open":
-
-        st.info(
-            "Pertanyaan Open Feedback "
-            "ditampilkan pada bagian Download Result."
-        )
-
-        return
-
-
-    # --------------------------------------------------------
-    # MA
-    # --------------------------------------------------------
-
-    if item["type"] == "MA":
-
-        rows = []
-
-        for option in item["options"]:
-
-            clean_option = str(option)
-
-            col = (
-                f"{selected_question}__"
-                f"{clean_option}"
-            )
-
-            if col not in df.columns:
-
-                continue
-
-
-            absolute = (
-                df[col]
-                .sum()
-            )
-
-
-            rows.append({
-
-                "Option":
-                    option,
-
-                "Absolute":
-                    absolute
-
-            })
-
-
-        result = pd.DataFrame(rows)
-
-
-    # --------------------------------------------------------
-    # SA
-    # --------------------------------------------------------
-
-    else:
-
-        series = df[
-            selected_question
-        ]
-
-
-        result = (
-            series
-            .value_counts(
-                dropna=False
-            )
-            .reset_index()
-        )
-
-
-        result.columns = [
-            "Option",
-            "Absolute"
-        ]
-
-
-    # --------------------------------------------------------
-    # PERCENTAGE
-    # --------------------------------------------------------
-
-    if "Percentage" in metrics:
-
-        total = result[
-            "Absolute"
-        ].sum()
-
-        if total > 0:
-
-            result[
-                "Percentage"
-            ] = (
-                result["Absolute"]
-                / total
-                * 100
-            ).round(1)
-
-
-    # --------------------------------------------------------
-    # AVERAGE
-    # --------------------------------------------------------
-
-    if "Average" in metrics:
-
-        if item["type"] == "SA":
-
-            numeric = pd.to_numeric(
-                df[selected_question],
-                errors="coerce"
-            )
-
-            result[
-                "Average"
-            ] = numeric.mean()
-
-
-    # --------------------------------------------------------
-    # DISPLAY
-    # --------------------------------------------------------
-
-    st.dataframe(
-        result,
-        use_container_width=True
-    )
-
-
-    # --------------------------------------------------------
-    # SIMPLE CHART
-    # --------------------------------------------------------
-
-    if not result.empty:
-
-        chart_data = result.set_index(
-            "Option"
-        )["Absolute"]
-
-        st.bar_chart(
-            chart_data
-        )
-
-
-# ============================================================
-# DOWNLOAD
-# ============================================================
-
-def download_section(
-    raw_df,
-    analysis_df,
-    metadata
-):
-
-    st.subheader(
-        "Download Result"
-    )
-
-
-    # --------------------------------------------------------
-    # VARIABLE ANALYSIS
-    # --------------------------------------------------------
-
-    variable_results = []
-
-
-    for item in metadata:
-
-        question = item["question"]
-
-        if item["type"] == "MA":
-
-            for option in item["options"]:
-
-                col = (
-                    f"{question}__{option}"
-                )
-
-                if col not in analysis_df.columns:
-
-                    continue
-
-
-                absolute = (
-                    analysis_df[col]
-                    .sum()
-                )
-
-
-                variable_results.append({
-
-                    "Question":
-                        question,
-
-                    "Option":
-                        option,
-
-                    "Type":
-                        "MA",
-
-                    "Absolute":
-                        absolute
-
-                })
-
-
-        else:
-
-            if question not in analysis_df.columns:
-
-                continue
-
-
-            series = (
-                analysis_df[
-                    question
-                ]
-                .dropna()
-            )
-
-
-            counts = (
-                series
-                .value_counts()
-            )
-
-
-            for option, count in counts.items():
-
-                variable_results.append({
-
-                    "Question":
-                        question,
-
-                    "Option":
-                        option,
-
-                    "Type":
-                        item["type"],
-
-                    "Absolute":
-                        count
-
-                })
-
-
-    variable_analysis = pd.DataFrame(
-        variable_results
-    )
-
-
-    # --------------------------------------------------------
-    # OPEN FEEDBACK
-    # --------------------------------------------------------
-
-    open_feedback = []
-
-
-    for item in metadata:
-
-        if item["type"] != "Open":
-
-            continue
-
-
-        question = item["question"]
-
-
-        if question not in analysis_df.columns:
-
-            continue
-
-
-        for value in analysis_df[
-            question
-        ].dropna():
-
-            value = str(value).strip()
-
-
-            if value:
-
-                open_feedback.append({
-
-                    "Question":
-                        question,
-
-                    "Open Feedback":
-                        value
-
-                })
-
-
-    open_feedback_df = pd.DataFrame(
-        open_feedback
-    )
-
-
-    # --------------------------------------------------------
-    # EXCEL
-    # --------------------------------------------------------
-
-    output = io.BytesIO()
-
-
-    with pd.ExcelWriter(
-        output,
-        engine="openpyxl"
-    ) as writer:
-
-
-        # Sheet 1
-        raw_df.to_excel(
-            writer,
-            sheet_name="1_Raw_Data"
-        )
-
-
-        # Sheet 2
-        variable_analysis.to_excel(
-            writer,
-            sheet_name="2_Variable_Analysis",
-            index=False
-        )
-
-
-        # Sheet 3
-        crosstab_result = (
-            st.session_state.get(
-                "crosstab_result"
-            )
-        )
-
-
-        if crosstab_result is not None:
-
-            crosstab_result.to_excel(
-                writer,
-                sheet_name="3_Crosstab"
-            )
-
-        else:
-
-            pd.DataFrame().to_excel(
-                writer,
-                sheet_name="3_Crosstab"
-            )
-
-
-        # Sheet 4
-        open_feedback_df.to_excel(
-            writer,
-            sheet_name="4_Open_Feedback",
-            index=False
-        )
-
-
-    output.seek(0)
-
-
-    st.download_button(
-        label="📥 Download Excel",
-        data=output,
-        file_name="survey_result.xlsx",
-        mime=(
-            "application/vnd.openxmlformats-officedocument."
-            "spreadsheetml.sheet"
-        )
-    )
+    return duplicate_df
