@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
-import textwrap
+import hashlib
+import vl_convert as vlc
 
 from io import BytesIO
 
@@ -16,6 +17,7 @@ from processing.processing_flow import (
     calculate_variable_analysis,
     calculate_crosstab,
     collect_open_feedback,
+    collect_ma_other_details,
     detect_contact_duplicates
 )
 
@@ -37,381 +39,371 @@ st.set_page_config(
 # ============================================================
 
 st.html(
-        """
-        <style>
+    """
+    <style>
 
-        .block-container {
-            padding-top: 2rem;
-            padding-bottom: 3rem;
-        }
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 3rem;
+    }
 
-        .hero {
-            padding: 28px 32px;
-            border-radius: 20px;
+    .hero {
+        padding: 28px 32px;
+        border-radius: 20px;
 
-            background: linear-gradient(
-                135deg,
-                #667eea 0%,
-                #764ba2 100%
+        background: linear-gradient(
+            135deg,
+            #667eea 0%,
+            #764ba2 100%
+        );
+
+        color: white;
+        margin-bottom: 25px;
+
+        box-shadow:
+            0 10px 30px rgba(
+                0,
+                0,
+                0,
+                0.15
+            );
+    }
+
+    .hero-title {
+        font-size: 34px;
+        font-weight: 800;
+        margin-bottom: 6px;
+    }
+
+    .hero-subtitle {
+        font-size: 15px;
+        opacity: 0.9;
+    }
+
+    .metric-card {
+        padding: 20px;
+        border-radius: 18px;
+
+        background-color:
+            var(--secondary-background-color);
+
+        color:
+            var(--text-color);
+
+        border:
+            1px solid rgba(
+                128,
+                128,
+                128,
+                0.22
             );
 
-            color: white;
-            margin-bottom: 25px;
-
-            box-shadow:
-                0 10px 30px rgba(
-                    0,
-                    0,
-                    0,
-                    0.15
-                );
-        }
-
-        .hero-title {
-            font-size: 34px;
-            font-weight: 800;
-            margin-bottom: 6px;
-        }
-
-        .hero-subtitle {
-            font-size: 15px;
-            opacity: 0.9;
-        }
-
-        .metric-card {
-            padding: 20px;
-            border-radius: 18px;
-
-            background-color:
-                var(--secondary-background-color);
-
-            color:
-                var(--text-color);
-
-            border:
-                1px solid rgba(
-                    128,
-                    128,
-                    128,
-                    0.22
-                );
-
-            box-shadow:
-                0 6px 20px rgba(
-                    0,
-                    0,
-                    0,
-                    0.06
-                );
-        }
-
-        .metric-label {
-            font-size: 13px;
-            color: var(--text-color);
-            opacity: 0.65;
-            font-weight: 600;
-            margin-bottom: 7px;
-        }
-
-        .metric-value {
-            font-size: 28px;
-            font-weight: 800;
-            color: var(--text-color);
-            line-height: 1.15;
-            overflow-wrap: anywhere;
-        }
-
-        .section-card {
-            background-color:
-                var(--secondary-background-color);
-
-            color:
-                var(--text-color);
-
-            padding: 22px;
-            border-radius: 18px;
-
-            border:
-                1px solid rgba(
-                    128,
-                    128,
-                    128,
-                    0.22
-                );
-
-            margin-bottom: 20px;
-
-            box-shadow:
-                0 5px 18px rgba(
-                    0,
-                    0,
-                    0,
-                    0.04
-                );
-        }
-
-        .badge {
-            display: inline-block;
-            padding: 5px 11px;
-            border-radius: 999px;
-            font-size: 12px;
-            font-weight: 700;
-            margin-right: 5px;
-        }
-
-        .badge-sa {
-            background: rgba(
-                74,
-                121,
-                220,
-                0.16
+        box-shadow:
+            0 6px 20px rgba(
+                0,
+                0,
+                0,
+                0.06
             );
-            color: #668cff;
-        }
+    }
 
-        .badge-ma {
-            background: rgba(
-                56,
-                160,
-                102,
-                0.16
+    .metric-label {
+        font-size: 13px;
+        color: var(--text-color);
+        opacity: 0.65;
+        font-weight: 600;
+        margin-bottom: 7px;
+    }
+
+    .metric-value {
+        font-size: 28px;
+        font-weight: 800;
+        color: var(--text-color);
+        line-height: 1.15;
+        overflow-wrap: anywhere;
+    }
+
+    .section-card {
+        background-color:
+            var(--secondary-background-color);
+
+        color:
+            var(--text-color);
+
+        padding: 22px;
+        border-radius: 18px;
+
+        border:
+            1px solid rgba(
+                128,
+                128,
+                128,
+                0.22
             );
-            color: #58b77e;
-        }
 
-        .badge-open {
-            background: rgba(
-                211,
-                139,
-                40,
-                0.16
+        margin-bottom: 20px;
+
+        box-shadow:
+            0 5px 18px rgba(
+                0,
+                0,
+                0,
+                0.04
             );
-            color: #d99b45;
-        }
+    }
 
-        .badge-contact {
-            background: rgba(
-                133,
-                95,
-                180,
-                0.16
+    .badge {
+        display: inline-block;
+        padding: 5px 11px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        margin-right: 5px;
+    }
+
+    .badge-sa {
+        background: rgba(
+            74,
+            121,
+            220,
+            0.16
+        );
+        color: #668cff;
+    }
+
+    .badge-ma {
+        background: rgba(
+            56,
+            160,
+            102,
+            0.16
+        );
+        color: #58b77e;
+    }
+
+    .badge-open {
+        background: rgba(
+            211,
+            139,
+            40,
+            0.16
+        );
+        color: #d99b45;
+    }
+
+    .badge-contact {
+        background: rgba(
+            133,
+            95,
+            180,
+            0.16
+        );
+        color: #a17ac7;
+    }
+
+    .info-box {
+        padding: 15px 18px;
+        border-radius: 14px;
+
+        background-color:
+            var(--secondary-background-color);
+
+        color:
+            var(--text-color);
+
+        border-left:
+            5px solid #667eea;
+
+        margin: 12px 0;
+    }
+
+    hr {
+        border: none;
+
+        border-top:
+            1px solid rgba(
+                128,
+                128,
+                128,
+                0.20
             );
-            color: #a17ac7;
-        }
 
-        .info-box {
-            padding: 15px 18px;
-            border-radius: 14px;
+        margin: 25px 0;
+    }
 
-            background-color:
-                var(--secondary-background-color);
+    .stButton > button {
+        border-radius: 12px;
+        font-weight: 700;
+        min-height: 42px;
+    }
 
-            color:
-                var(--text-color);
+    [data-testid="stDataFrame"] {
+        border-radius: 12px;
+        overflow: hidden;
+    }
 
-            border-left:
-                5px solid #667eea;
+    .analysis-card {
+        background-color:
+            var(--secondary-background-color);
 
-            margin: 12px 0;
-        }
+        color:
+            var(--text-color);
 
-        hr {
-            border: none;
+        padding: 14px 18px;
+        border-radius: 16px;
 
-            border-top:
-                1px solid rgba(
-                    128,
-                    128,
-                    128,
-                    0.20
-                );
+        border:
+            1px solid rgba(
+                128,
+                128,
+                128,
+                0.22
+            );
 
-            margin: 25px 0;
-        }
+        margin-bottom: 12px;
 
-        .stButton > button {
-            border-radius: 12px;
-            font-weight: 700;
-            min-height: 42px;
-        }
+        box-shadow:
+            0 4px 14px rgba(
+                0,
+                0,
+                0,
+                0.04
+            );
+    }
 
-        [data-testid="stDataFrame"] {
-            border-radius: 12px;
-            overflow: hidden;
-        }
+    .analysis-question {
+        font-size: 16px;
+        font-weight: 750;
+        margin-bottom: 3px;
 
-        .analysis-card {
-            background-color:
-                var(--secondary-background-color);
+        color:
+            var(--text-color);
 
-            color:
-                var(--text-color);
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: normal;
 
-            padding: 14px 18px;
-            border-radius: 16px;
+        line-height: 1.45;
+        min-height: 46px;
+    }
 
-            border:
-                1px solid rgba(
-                    128,
-                    128,
-                    128,
-                    0.22
-                );
+    .analysis-small {
+        font-size: 12px;
+        color: var(--text-color);
+        opacity: 0.65;
+    }
 
-            margin-bottom: 12px;
+    div[data-testid="stExpander"] {
+        margin-top: -4px;
+        margin-bottom: 4px;
+    }
 
-            box-shadow:
-                0 4px 14px rgba(
-                    0,
-                    0,
-                    0,
-                    0.04
-                );
-        }
+    .feedback-container {
+        height: 520px;
+        overflow-y: auto;
 
-        .analysis-question {
-            font-size: 16px;
-            font-weight: 750;
-            margin-bottom: 3px;
+        padding: 14px;
 
-            color:
-                var(--text-color);
+        background-color:
+            var(--secondary-background-color);
 
-            white-space: normal;
-            overflow-wrap: anywhere;
-            word-break: normal;
+        border:
+            1px solid rgba(
+                128,
+                128,
+                128,
+                0.22
+            );
 
-            line-height: 1.45;
-            min-height: 46px;
-        }
+        border-radius: 16px;
 
-        .analysis-small {
-            font-size: 12px;
-            color: var(--text-color);
-            opacity: 0.65;
-        }
+        margin-top: 10px;
+    }
 
-        div[data-testid="stExpander"] {
-            margin-top: -4px;
-            margin-bottom: 4px;
-        }
+    .feedback-card {
+        background-color:
+            var(--background-color);
 
-        /* =========================
-           OPEN FEEDBACK
-        ========================= */
+        color:
+            var(--text-color);
 
-        .feedback-container {
-            height: 520px;
-            overflow-y: auto;
+        border:
+            1px solid rgba(
+                128,
+                128,
+                128,
+                0.18
+            );
 
-            padding: 14px;
+        border-radius: 12px;
 
-            background-color:
-                var(--secondary-background-color);
+        padding: 15px 17px;
 
-            border:
-                1px solid rgba(
-                    128,
-                    128,
-                    128,
-                    0.22
-                );
+        margin-bottom: 12px;
+    }
 
-            border-radius: 16px;
+    .feedback-number {
+        font-size: 12px;
+        font-weight: 700;
 
-            margin-top: 10px;
-        }
+        color:
+            var(--text-color);
 
-        .feedback-card {
-            background-color:
-                var(--background-color);
+        opacity: 0.55;
 
-            color:
-                var(--text-color);
+        margin-bottom: 5px;
+    }
 
-            border:
-                1px solid rgba(
-                    128,
-                    128,
-                    128,
-                    0.18
-                );
+    .feedback-question {
+        font-size: 13px;
+        font-weight: 700;
 
-            border-radius: 12px;
+        color:
+            var(--text-color);
 
-            padding: 15px 17px;
+        opacity: 0.75;
 
-            margin-bottom: 12px;
-        }
+        font-style: italic;
 
-        .feedback-number {
-            font-size: 12px;
-            font-weight: 700;
+        margin-bottom: 8px;
+    }
 
-            color:
-                var(--text-color);
+    .feedback-text {
+        font-size: 15px;
 
-            opacity: 0.55;
+        color:
+            var(--text-color);
 
-            margin-bottom: 5px;
-        }
+        line-height: 1.65;
 
-        .feedback-question {
-            font-size: 13px;
-            font-weight: 700;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: normal;
+    }
 
-            color:
-                var(--text-color);
+    div[data-testid="stButton"] button[kind="secondary"] {
+        background-color: #4F6D8A;
+        color: white;
 
-            opacity: 0.75;
+        border:
+            1px solid #4F6D8A;
 
-            font-style: italic;
+        border-radius: 12px;
 
-            margin-bottom: 8px;
-        }
+        font-weight: 700;
+    }
 
-        .feedback-text {
-            font-size: 15px;
+    div[data-testid="stButton"] button[kind="secondary"]:hover {
+        background-color: #3F5B75;
+        color: white;
 
-            color:
-                var(--text-color);
+        border:
+            1px solid #3F5B75;
+    }
 
-            line-height: 1.65;
-
-            
-
-            white-space: normal;
-            overflow-wrap: anywhere;
-            word-break: normal;
-        }
-
-        /* =========================
-           CONTINUE BUTTON
-        ========================= */
-
-        div[data-testid="stButton"] button[kind="secondary"] {
-            background-color: #4F6D8A;
-            color: white;
-
-            border:
-                1px solid #4F6D8A;
-
-            border-radius: 12px;
-
-            font-weight: 700;
-        }
-
-        div[data-testid="stButton"] button[kind="secondary"]:hover {
-            background-color: #3F5B75;
-            color: white;
-
-            border:
-                1px solid #3F5B75;
-        }
-
-        </style>
-        """
-    )
+    </style>
+    """
+)
 
 
 # ============================================================
@@ -472,6 +464,86 @@ for key, value in DEFAULT_STATE.items():
 
 
 # ============================================================
+# HELPERS
+# ============================================================
+
+def make_widget_key(
+    prefix,
+    value
+):
+
+    digest = (
+        hashlib.md5(
+            str(
+                value
+            )
+            .encode(
+                "utf-8"
+            )
+        )
+        .hexdigest()[:10]
+    )
+
+    return (
+        f"{prefix}_{digest}"
+    )
+
+
+def percentage_to_text(
+    value
+):
+
+    try:
+
+        if pd.isna(
+            value
+        ):
+            return ""
+
+        return (
+            f"{float(value):.1f}%"
+        )
+
+    except (
+        TypeError,
+        ValueError
+    ):
+
+        return value
+
+
+def chart_to_png(
+    chart,
+    title
+):
+
+    export_chart = (
+        chart
+        .properties(
+            title=alt.TitleParams(
+                text=title,
+                fontSize=18,
+                fontWeight="bold",
+                anchor="start",
+                offset=18
+            )
+        )
+    )
+
+    spec = (
+        export_chart
+        .to_dict()
+    )
+
+    return (
+        vlc.vegalite_to_png(
+            spec,
+            scale=2
+        )
+    )
+
+
+# ============================================================
 # CONTINUE BUTTON
 # ============================================================
 
@@ -506,7 +578,9 @@ def continue_button(
 # ============================================================
 
 def render_variable_chart(
-    result_df
+    result_df,
+    question,
+    chart_key
 ):
 
     if result_df.empty:
@@ -547,10 +621,6 @@ def render_variable_chart(
         )
         .fillna(0)
     )
-
-    # ========================================================
-    # 2 OPTIONS → PIE
-    # ========================================================
 
     if len(
         chart_df
@@ -604,15 +674,6 @@ def render_variable_chart(
                 height=220
             )
         )
-
-        st.altair_chart(
-            chart,
-            use_container_width=True
-        )
-
-    # ========================================================
-    # >2 OPTIONS → BAR
-    # ========================================================
 
     else:
 
@@ -678,9 +739,38 @@ def render_variable_chart(
             )
         )
 
-        st.altair_chart(
-            chart,
+    st.altair_chart(
+        chart,
+        use_container_width=True
+    )
+
+    try:
+
+        png_data = (
+            chart_to_png(
+                chart,
+                question
+            )
+        )
+
+        st.download_button(
+            "💾 Save Chart",
+            data=
+                png_data,
+            file_name=
+                f"{chart_key}.png",
+            mime=
+                "image/png",
+            key=
+                f"download_{chart_key}",
             use_container_width=True
+        )
+
+    except Exception:
+
+        st.caption(
+            "Install `vl-convert-python` "
+            "to enable PNG chart download."
         )
 
 
@@ -689,20 +779,15 @@ def render_variable_chart(
 # ============================================================
 
 def render_crosstab_chart(
-    percentage_df
+    percentage_df,
+    chart_type="Grouped Bar",
+    title="Crosstab",
+    chart_key="crosstab"
 ):
 
     if percentage_df.empty:
 
         return
-
-    row_count = (
-        percentage_df.shape[0]
-    )
-
-    column_count = (
-        percentage_df.shape[1]
-    )
 
     chart_df = (
         percentage_df
@@ -712,7 +797,9 @@ def render_crosstab_chart(
     )
 
     first_column = (
-        chart_df.columns[0]
+        chart_df.columns[
+            0
+        ]
     )
 
     chart_df = (
@@ -736,14 +823,9 @@ def render_crosstab_chart(
         )
     )
 
-    # ========================================================
-    # <=3 x 3 → VERTICAL
-    # ========================================================
-
     if (
-        row_count <= 3
-        and
-        column_count <= 3
+        chart_type
+        == "Stacked Bar"
     ):
 
         chart = (
@@ -751,28 +833,25 @@ def render_crosstab_chart(
                 chart_df
             )
             .mark_bar(
-                cornerRadiusTopLeft=3,
-                cornerRadiusTopRight=3
+                cornerRadiusEnd=3
             )
             .encode(
 
                 x=alt.X(
+                    "Percentage:Q",
+                    title=
+                        "Percentage (%)",
+                    stack="zero"
+                ),
+
+                y=alt.Y(
                     "Row Option:N",
                     title=None,
 
                     axis=alt.Axis(
-                        labelLimit=250,
-                        labelAngle=0
+                        labelLimit=400,
+                        labelPadding=8
                     )
-                ),
-
-                xOffset=
-                    "Column Option:N",
-
-                y=alt.Y(
-                    "Percentage:Q",
-                    title=
-                        "Percentage (%)"
                 ),
 
                 color=alt.Color(
@@ -784,7 +863,11 @@ def render_crosstab_chart(
                             "#7FA6B8",
                             "#9CB9A8",
                             "#A99DB8",
-                            "#B7AB8B"
+                            "#B7AB8B",
+                            "#8FAAB2",
+                            "#A6B198",
+                            "#B69DA2",
+                            "#8D9AAD"
                         ]
                     )
                 ),
@@ -808,18 +891,14 @@ def render_crosstab_chart(
                 ]
             )
             .properties(
-                height=270
+                height=max(
+                    250,
+                    percentage_df.shape[
+                        0
+                    ] * 48
+                )
             )
         )
-
-        st.altair_chart(
-            chart,
-            use_container_width=True
-        )
-
-    # ========================================================
-    # >3 x 3 → HORIZONTAL
-    # ========================================================
 
     else:
 
@@ -862,7 +941,9 @@ def render_crosstab_chart(
                             "#A99DB8",
                             "#B7AB8B",
                             "#8FAAB2",
-                            "#A6B198"
+                            "#A6B198",
+                            "#B69DA2",
+                            "#8D9AAD"
                         ]
                     )
                 ),
@@ -887,15 +968,46 @@ def render_crosstab_chart(
             )
             .properties(
                 height=max(
-                    240,
-                    row_count * 45
+                    250,
+                    percentage_df.shape[
+                        0
+                    ] * 48
                 )
             )
         )
 
-        st.altair_chart(
-            chart,
+    st.altair_chart(
+        chart,
+        use_container_width=True
+    )
+
+    try:
+
+        png_data = (
+            chart_to_png(
+                chart,
+                title
+            )
+        )
+
+        st.download_button(
+            "💾 Save Crosstab Chart",
+            data=
+                png_data,
+            file_name=
+                f"{chart_key}.png",
+            mime=
+                "image/png",
+            key=
+                f"download_{chart_key}",
             use_container_width=True
+        )
+
+    except Exception:
+
+        st.caption(
+            "Install `vl-convert-python` "
+            "to enable PNG chart download."
         )
 
 
@@ -1402,16 +1514,16 @@ if selected_step == "🏠 Overview":
     st.write("")
 
     st.html(
-            f"""
-            <div class="info-box">
+        f"""
+        <div class="info-box">
 
-                <b>{active_questions}</b>
-                active variables are currently included
-                in the workflow.
+            <b>{active_questions}</b>
+            active variables are currently included
+            in the workflow.
 
-            </div>
-            """
-        )
+        </div>
+        """
+    )
 
     st.subheader(
         "Question Overview"
@@ -1554,7 +1666,8 @@ elif selected_step == "🔍 Duplicate":
                 [
                     "Select a question"
                 ]
-                + contact_questions
+                + contact_questions,
+                key="duplicate_contact_question"
             )
         )
 
@@ -1738,7 +1851,8 @@ elif selected_step == "🔍 Duplicate":
                             (
                                 f"Row {index + 1} — "
                                 f"{contact_mapping.get(index, '')}"
-                            )
+                            ),
+                    key="duplicate_rows_to_delete"
                 )
             )
 
@@ -1773,7 +1887,9 @@ elif selected_step == "🔍 Duplicate":
                     item = (
                         get_question_metadata(
                             metadata,
-                            selected_question
+                            st.session_state[
+                                "duplicate_question"
+                            ]
                         )
                     )
 
@@ -2051,7 +2167,8 @@ elif selected_step == "🔀 Routing":
                 +
                 st.session_state[
                     "removed_questions"
-                ]
+                ],
+                key="restore_variable"
             )
         )
 
@@ -2083,7 +2200,7 @@ elif selected_step == "🔀 Routing":
 
     routing_config = {}
 
-    for index, question in enumerate(
+    for question in list(
         st.session_state[
             "active_questions"
         ]
@@ -2124,19 +2241,21 @@ elif selected_step == "🔀 Routing":
         with col1:
 
             st.html(
-                    f"""
-                    <span class="badge badge-{item['type'].lower()}">
-                        {item['type']}
-                    </span>
-                    """
-                )
+                f"""
+                <span class="badge badge-{item['type'].lower()}">
+                    {item['type']}
+                </span>
+                """
+            )
 
         with col2:
 
             if st.button(
                 "✕",
-                key=
-                    f"remove_question_{index}"
+                key=make_widget_key(
+                    "remove_question",
+                    question
+                )
             ):
 
                 st.session_state[
@@ -2183,8 +2302,10 @@ elif selected_step == "🔀 Routing":
             st.selectbox(
                 "Base Variable",
                 base_options,
-                key=
-                    f"routing_base_{index}"
+                key=make_widget_key(
+                    "routing_base",
+                    question
+                )
             )
         )
 
@@ -2221,8 +2342,10 @@ elif selected_step == "🔀 Routing":
                     base_item[
                         "options"
                     ],
-                    key=
-                        f"routing_values_{index}"
+                    key=make_widget_key(
+                        "routing_values",
+                        question
+                    )
                 )
             )
 
@@ -2252,9 +2375,25 @@ elif selected_step == "🔀 Routing":
 
         st.session_state[
             "applied_routing_config"
-        ] = (
-            routing_config.copy()
-        )
+        ] = {
+            key: {
+                "base_question":
+                    value.get(
+                        "base_question"
+                    ),
+
+                "values":
+                    list(
+                        value.get(
+                            "values",
+                            []
+                        )
+                    )
+            }
+
+            for key, value
+            in routing_config.items()
+        }
 
         st.session_state[
             "crosstab_results"
@@ -2280,7 +2419,8 @@ elif selected_step == "📊 Crosstab":
     )
 
     st.caption(
-        "Create up to 10 crosstab configurations."
+        "Create up to 10 crosstab configurations. "
+        "Supported combinations: SA × SA and SA × MA."
     )
 
     crosstab_variables = [
@@ -2297,6 +2437,27 @@ elif selected_step == "📊 Crosstab":
                 "SA",
                 "MA"
             ]
+            and
+            item[
+                "question"
+            ]
+            in st.session_state[
+                "active_questions"
+            ]
+        )
+    ]
+
+    row_variables = [
+        item[
+            "question"
+        ]
+        for item
+        in metadata
+        if (
+            item[
+                "type"
+            ]
+            == "SA"
             and
             item[
                 "question"
@@ -2328,8 +2489,8 @@ elif selected_step == "📊 Crosstab":
                 )
             )
 
-            col1, col2, col3 = (
-                st.columns(3)
+            col1, col2 = (
+                st.columns(2)
             )
 
             with col1:
@@ -2340,7 +2501,7 @@ elif selected_step == "📊 Crosstab":
                         [
                             "Select Variable"
                         ]
-                        + crosstab_variables,
+                        + row_variables,
                         key=
                             f"ct_row_{index}"
                     )
@@ -2360,6 +2521,10 @@ elif selected_step == "📊 Crosstab":
                     )
                 )
 
+            col3, col4 = (
+                st.columns(2)
+            )
+
             with col3:
 
                 metric = (
@@ -2374,39 +2539,19 @@ elif selected_step == "📊 Crosstab":
                     )
                 )
 
-            column_option = None
+            with col4:
 
-            if (
-                column_question
-                != "Select Variable"
-            ):
-
-                column_item = (
-                    get_question_metadata(
-                        metadata,
-                        column_question
+                chart_type = (
+                    st.selectbox(
+                        "Chart Type",
+                        [
+                            "Grouped Bar",
+                            "Stacked Bar"
+                        ],
+                        key=
+                            f"ct_chart_type_{index}"
                     )
                 )
-
-                if (
-                    column_item
-                    and
-                    column_item[
-                        "type"
-                    ]
-                    == "MA"
-                ):
-
-                    column_option = (
-                        st.selectbox(
-                            "MA Option",
-                            column_item[
-                                "options"
-                            ],
-                            key=
-                                f"ct_ma_option_{index}"
-                        )
-                    )
 
             if (
                 row_question
@@ -2416,64 +2561,28 @@ elif selected_step == "📊 Crosstab":
                 != "Select Variable"
             ):
 
-                row_item = (
-                    get_question_metadata(
-                        metadata,
-                        row_question
-                    )
+                crosstab_configs.append(
+                    {
+                        "name":
+                            (
+                                crosstab_name.strip()
+                                or
+                                f"Crosstab {index + 1}"
+                            ),
+
+                        "row_question":
+                            row_question,
+
+                        "column_question":
+                            column_question,
+
+                        "metric":
+                            metric,
+
+                        "chart_type":
+                            chart_type
+                    }
                 )
-
-                column_item = (
-                    get_question_metadata(
-                        metadata,
-                        column_question
-                    )
-                )
-
-                row_type = (
-                    row_item[
-                        "type"
-                    ]
-                )
-
-                column_type = (
-                    column_item[
-                        "type"
-                    ]
-                )
-
-                if (
-                    row_type == "SA"
-                    and
-                    column_type
-                    in [
-                        "SA",
-                        "MA"
-                    ]
-                ):
-
-                    crosstab_configs.append(
-                        {
-                            "name":
-                                (
-                                    crosstab_name.strip()
-                                    or
-                                    f"Crosstab {index + 1}"
-                                ),
-
-                            "row_question":
-                                row_question,
-
-                            "column_question":
-                                column_question,
-
-                            "column_option":
-                                column_option,
-
-                            "metric":
-                                metric
-                        }
-                    )
 
     if st.button(
         "🚀 Apply All Crosstabs",
@@ -2536,10 +2645,7 @@ elif selected_step == "📊 Crosstab":
                     calculate_crosstab(
                         filtered_df,
                         row_item,
-                        column_item,
-                        config[
-                            "column_option"
-                        ]
+                        column_item
                     )
                 )
 
@@ -2597,6 +2703,8 @@ elif selected_step == "📈 Analyze Result":
 
     all_results = {}
 
+    filtered_data_by_question = {}
+
     for question in (
         st.session_state[
             "active_questions"
@@ -2623,6 +2731,10 @@ elif selected_step == "📈 Analyze Result":
                 ]
             )
         )
+
+        filtered_data_by_question[
+            question
+        ] = filtered_df
 
         result = (
             calculate_variable_analysis(
@@ -2728,10 +2840,6 @@ elif selected_step == "📈 Analyze Result":
 
     st.write("")
 
-    # ========================================================
-    # VARIABLE ANALYSIS
-    # ========================================================
-
     st.subheader(
         "Variable Analysis"
     )
@@ -2774,7 +2882,6 @@ elif selected_step == "📈 Analyze Result":
             .lower()
         )
 
-        # ONLY SA / MA CAN BECOME CHART
         if question_type not in [
             "sa",
             "ma"
@@ -2852,6 +2959,13 @@ elif selected_step == "📈 Analyze Result":
                 ]
             )
 
+            item = (
+                get_question_metadata(
+                    metadata,
+                    question
+                )
+            )
+
             with column:
 
                 st.html(
@@ -2873,12 +2987,49 @@ elif selected_step == "📈 Analyze Result":
                 )
 
                 render_variable_chart(
-                    result_df
+                    result_df,
+                    question,
+                    make_widget_key(
+                        "variable_chart",
+                        question
+                    )
                 )
 
-    # ========================================================
-    # CROSSTAB ANALYSIS
-    # ========================================================
+                if (
+                    result[
+                        "type"
+                    ]
+                    == "MA"
+                    and
+                    "Lainnya"
+                    in item.get(
+                        "options",
+                        []
+                    )
+                ):
+
+                    other_df = (
+                        collect_ma_other_details(
+                            filtered_data_by_question[
+                                question
+                            ],
+                            item
+                        )
+                    )
+
+                    if not other_df.empty:
+
+                        with st.expander(
+                            f"🔎 Lihat isi Lainnya "
+                            f"({len(other_df):,})"
+                        ):
+
+                            st.dataframe(
+                                other_df,
+                                use_container_width=True,
+                                hide_index=True,
+                                height=300
+                            )
 
     st.divider()
 
@@ -2937,19 +3088,92 @@ elif selected_step == "📈 Analyze Result":
                 """
             )
 
-            percentage_df = (
-                result[
-                    "percentage"
-                ]
-                .copy()
-                .round(1)
-            )
-
-            if not percentage_df.empty:
-
-                render_crosstab_chart(
-                    percentage_df
+            if (
+                item.get(
+                    "metric"
                 )
+                == "Absolute"
+            ):
+
+                chart_source = (
+                    result[
+                        "absolute"
+                    ]
+                    .astype(float)
+                )
+
+            else:
+
+                chart_source = (
+                    result[
+                        "percentage"
+                    ]
+                    .copy()
+                    .round(1)
+                )
+
+            if not chart_source.empty:
+
+                if (
+                    item.get(
+                        "metric"
+                    )
+                    == "Percentage"
+                ):
+
+                    render_crosstab_chart(
+                        chart_source,
+                        chart_type=
+                            item.get(
+                                "chart_type",
+                                "Grouped Bar"
+                            ),
+                        title=
+                            title,
+                        chart_key=
+                            f"crosstab_{index + 1}"
+                    )
+
+                else:
+
+                    absolute_chart_df = (
+                        chart_source
+                        .copy()
+                    )
+
+                    total = (
+                        absolute_chart_df
+                        .to_numpy()
+                        .sum()
+                    )
+
+                    if total > 0:
+
+                        chart_percentage_df = (
+                            absolute_chart_df
+                            / total
+                            * 100
+                        )
+
+                    else:
+
+                        chart_percentage_df = (
+                            absolute_chart_df
+                            .copy()
+                        )
+
+                    render_crosstab_chart(
+                        chart_percentage_df,
+                        chart_type=
+                            item.get(
+                                "chart_type",
+                                "Grouped Bar"
+                            ),
+                        title=
+                            title,
+                        chart_key=
+                            f"crosstab_{index + 1}"
+                    )
 
             with st.expander(
                 "View Absolute Results"
@@ -2976,9 +3200,63 @@ elif selected_step == "📈 Analyze Result":
                     hide_index=False
                 )
 
-    # ========================================================
-    # OPEN FEEDBACK
-    # ========================================================
+            column_item = (
+                get_question_metadata(
+                    metadata,
+                    item[
+                        "column_question"
+                    ]
+                )
+            )
+
+            if (
+                column_item
+                and
+                column_item.get(
+                    "type"
+                )
+                == "MA"
+                and
+                "Lainnya"
+                in column_item.get(
+                    "options",
+                    []
+                )
+            ):
+
+                crosstab_base_df = (
+                    get_filtered_df(
+                        analysis_base_df,
+                        item[
+                            "row_question"
+                        ],
+                        metadata,
+                        st.session_state[
+                            "applied_routing_config"
+                        ]
+                    )
+                )
+
+                other_df = (
+                    collect_ma_other_details(
+                        crosstab_base_df,
+                        column_item
+                    )
+                )
+
+                if not other_df.empty:
+
+                    with st.expander(
+                        f"🔎 Lihat isi Lainnya "
+                        f"({len(other_df):,})"
+                    ):
+
+                        st.dataframe(
+                            other_df,
+                            use_container_width=True,
+                            hide_index=True,
+                            height=300
+                        )
 
     st.divider()
 
@@ -3154,7 +3432,7 @@ elif selected_step == "📈 Analyze Result":
         )
 
         st.html(
-            feedback_html,
+            feedback_html
         )
 
     continue_button(
@@ -3200,10 +3478,6 @@ elif selected_step == "📥 Download":
             engine="openpyxl"
         ) as writer:
 
-            # =================================================
-            # 1. RAW DATA
-            # =================================================
-
             raw_export_df = (
                 prepare_excel_df(
                     raw_df
@@ -3216,10 +3490,6 @@ elif selected_step == "📥 Download":
                     "1_Raw_Data",
                 index=False
             )
-
-            # =================================================
-            # 2. VARIABLE ANALYSIS
-            # =================================================
 
             variable_sheet = (
                 "2_Variable_Analysis"
@@ -3333,7 +3603,9 @@ elif selected_step == "📥 Download":
                                 ],
                                 errors="coerce"
                             )
-                            .round(1)
+                            .apply(
+                                percentage_to_text
+                            )
                         )
 
                     export_df.to_excel(
@@ -3351,10 +3623,6 @@ elif selected_step == "📥 Download":
                         )
                         + 3
                     )
-
-            # =================================================
-            # 3. CROSSTAB
-            # =================================================
 
             crosstab_sheet = (
                 "3_Crosstab"
@@ -3419,6 +3687,14 @@ elif selected_step == "📥 Download":
                                 item[
                                     "column_question"
                                 ]
+                            ],
+
+                        "Chart Type":
+                            [
+                                item.get(
+                                    "chart_type",
+                                    "Grouped Bar"
+                                )
                             ]
                     }
                 ).to_excel(
@@ -3431,30 +3707,6 @@ elif selected_step == "📥 Download":
                 )
 
                 row_position += 2
-
-                if item.get(
-                    "column_option"
-                ):
-
-                    pd.DataFrame(
-                        {
-                            "MA Option":
-                                [
-                                    item[
-                                        "column_option"
-                                    ]
-                                ]
-                        }
-                    ).to_excel(
-                        writer,
-                        sheet_name=
-                            crosstab_sheet,
-                        startrow=
-                            row_position,
-                        index=False
-                    )
-
-                    row_position += 2
 
                 result = (
                     item[
@@ -3536,8 +3788,27 @@ elif selected_step == "📥 Download":
                         "percentage"
                     ]
                     .reset_index()
-                    .round(1)
                 )
+
+                for column in (
+                    percentage_df.columns[
+                        1:
+                    ]
+                ):
+
+                    percentage_df[
+                        column
+                    ] = (
+                        pd.to_numeric(
+                            percentage_df[
+                                column
+                            ],
+                            errors="coerce"
+                        )
+                        .apply(
+                            percentage_to_text
+                        )
+                    )
 
                 percentage_df = (
                     prepare_excel_df(
@@ -3580,10 +3851,6 @@ elif selected_step == "📥 Download":
                         )
                         + 3
                     )
-
-            # =================================================
-            # 4. OPEN FEEDBACK
-            # =================================================
 
             feedback_list = []
 
@@ -3665,6 +3932,103 @@ elif selected_step == "📥 Download":
                 writer,
                 sheet_name=
                     "4_Open_Feedback",
+                index=False
+            )
+
+            other_results = []
+
+            for question in (
+                st.session_state[
+                    "active_questions"
+                ]
+            ):
+
+                item = (
+                    get_question_metadata(
+                        metadata,
+                        question
+                    )
+                )
+
+                if item is None:
+                    continue
+
+                if (
+                    item.get(
+                        "type"
+                    )
+                    != "MA"
+                ):
+                    continue
+
+                if (
+                    "Lainnya"
+                    not in item.get(
+                        "options",
+                        []
+                    )
+                ):
+                    continue
+
+                filtered_df = (
+                    get_filtered_df(
+                        export_analysis_df,
+                        question,
+                        metadata,
+                        st.session_state[
+                            "applied_routing_config"
+                        ]
+                    )
+                )
+
+                other_df = (
+                    collect_ma_other_details(
+                        filtered_df,
+                        item
+                    )
+                )
+
+                if other_df.empty:
+                    continue
+
+                other_df = (
+                    other_df.copy()
+                )
+
+                other_df.insert(
+                    0,
+                    "Question",
+                    question
+                )
+
+                other_results.append(
+                    other_df
+                )
+
+            if other_results:
+
+                other_export_df = (
+                    pd.concat(
+                        other_results,
+                        ignore_index=True
+                    )
+                )
+
+            else:
+
+                other_export_df = (
+                    pd.DataFrame(
+                        columns=[
+                            "Question",
+                            "Other Response"
+                        ]
+                    )
+                )
+
+            other_export_df.to_excel(
+                writer,
+                sheet_name=
+                    "5_Other_Responses",
                 index=False
             )
 
