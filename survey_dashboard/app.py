@@ -16,7 +16,6 @@ from processing.processing_flow import (
     calculate_variable_analysis,
     calculate_crosstab,
     collect_open_feedback,
-    detect_open_duplicates,
     detect_contact_duplicates
 )
 
