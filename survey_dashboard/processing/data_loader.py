@@ -202,37 +202,123 @@ def is_open_question_hint(question):
 
 
 # ============================================================
-# GOOGLE FORMS MA OPTION NORMALIZATION
+# OTHER / LAINNYA
 # ============================================================
 
-def normalize_google_ma_option(option):
+OTHER_PREFIXES = [
+    "lainnya",
+    "lain-lain",
+    "lain lain",
+    "other",
+    "others",
+    "other response",
+    "other (please specify)",
+    "other please specify"
+]
+
+
+def is_other_option(value):
+
+    text = (
+        clean_text(
+            value
+        )
+        .lower()
+    )
+
+    if not text:
+
+        return False
+
+    for prefix in OTHER_PREFIXES:
+
+        if text == prefix:
+
+            return True
+
+        if text.startswith(
+            prefix + ":"
+        ):
+
+            return True
+
+        if text.startswith(
+            prefix + " -"
+        ):
+
+            return True
+
+        if text.startswith(
+            prefix + "-"
+        ):
+
+            return True
+
+    return False
+
+
+def normalize_ma_option(option):
 
     text = clean_text(
         option
+    )
+
+    if is_other_option(
+        text
+    ):
+
+        return "Lainnya"
+
+    return text
+
+
+def normalize_google_ma_option(option):
+
+    return normalize_ma_option(
+        option
+    )
+
+
+def extract_other_detail(value):
+
+    if pd.isna(value):
+
+        return ""
+
+    text = clean_text(
+        value
     )
 
     text_lower = (
         text.lower()
     )
 
-    other_prefixes = [
-        "lainnya",
-        "lain-lain",
-        "other",
-        "others"
-    ]
+    for prefix in OTHER_PREFIXES:
 
-    for prefix in (
-        other_prefixes
-    ):
+        if text_lower == prefix:
 
-        if text_lower.startswith(
-            prefix
-        ):
+            return ""
 
-            return "Lainnya"
+        patterns = [
+            prefix + ":",
+            prefix + " -",
+            prefix + "-"
+        ]
 
-    return text
+        for pattern in patterns:
+
+            if text_lower.startswith(
+                pattern
+            ):
+
+                return (
+                    text[
+                        len(pattern):
+                    ]
+                    .strip()
+                )
+
+    return ""
 
 
 # ============================================================
@@ -244,18 +330,10 @@ def detect_google_question_type(
     question=""
 ):
 
-    # ========================================================
-    # CONTACT
-    # ========================================================
-
     if is_phone_question(
         question
     ):
         return "Contact"
-
-    # ========================================================
-    # DEFINITE OPEN
-    # ========================================================
 
     if is_name_question(
         question
@@ -306,19 +384,6 @@ def detect_google_question_type(
         .str.len()
         .mean()
     )
-
-    # ========================================================
-    # GOOGLE FORMS MA DETECTION
-    # ========================================================
-    # Google Forms MA biasanya berada dalam satu kolom:
-    #
-    # "Harga, Kecepatan, Lokasi"
-    #
-    # Koma saja tidak cukup, sehingga diperiksa juga:
-    # - jumlah row dengan >1 jawaban
-    # - pengulangan opsi antar responden
-    # - panjang rata-rata opsi
-    # ========================================================
 
     rows_with_multiple = 0
 
@@ -409,14 +474,6 @@ def detect_google_question_type(
 
             return "MA"
 
-    # ========================================================
-    # OPEN TEXT FALLBACK
-    # ========================================================
-    # Jangan menebak Open hanya dari kata "Mengapa/Kenapa".
-    # Open ditentukan dari pola jawaban bebas yang sangat unik
-    # dan relatif panjang.
-    # ========================================================
-
     if (
         unique_ratio >= 0.90
         and
@@ -424,10 +481,6 @@ def detect_google_question_type(
     ):
 
         return "Open"
-
-    # ========================================================
-    # DEFAULT = SA
-    # ========================================================
 
     return "SA"
 
@@ -455,7 +508,7 @@ def parse_google_ma_options(series):
             continue
 
         parts = [
-            normalize_google_ma_option(
+            normalize_ma_option(
                 part
             )
 
@@ -470,7 +523,8 @@ def parse_google_ma_options(series):
         for option in parts:
 
             key = (
-                option.lower()
+                option
+                .lower()
             )
 
             if key in seen:
@@ -538,10 +592,6 @@ def load_google_forms(
             )
         )
 
-        # ====================================================
-        # MA
-        # ====================================================
-
         if question_type == "MA":
 
             options = (
@@ -553,6 +603,8 @@ def load_google_forms(
             )
 
             internal_columns = []
+
+            other_detail_column = None
 
             for option in options:
 
@@ -578,7 +630,7 @@ def load_google_forms(
                 )
 
                 target_option = (
-                    normalize_google_ma_option(
+                    normalize_ma_option(
                         option
                     )
                     .lower()
@@ -602,7 +654,7 @@ def load_google_forms(
                         return 0
 
                     answers = [
-                        normalize_google_ma_option(
+                        normalize_ma_option(
                             part
                         )
                         .lower()
@@ -616,7 +668,8 @@ def load_google_forms(
                     ]
 
                     return int(
-                        target in answers
+                        target
+                        in answers
                     )
 
                 analysis_df[
@@ -629,6 +682,76 @@ def load_google_forms(
                         parse_answer
                     )
                 )
+
+                if (
+                    option
+                    == "Lainnya"
+                ):
+
+                    other_detail_column = (
+                        make_unique_name(
+                            safe_column_name(
+                                f"{question}_Lainnya_Detail"
+                            ),
+                            used_internal_names
+                        )
+                    )
+
+                    used_internal_names.add(
+                        other_detail_column
+                    )
+
+                    def extract_google_other(
+                        value
+                    ):
+
+                        if pd.isna(
+                            value
+                        ):
+
+                            return ""
+
+                        details = []
+
+                        for part in str(
+                            value
+                        ).split(","):
+
+                            part = (
+                                clean_text(
+                                    part
+                                )
+                            )
+
+                            if not part:
+                                continue
+
+                            detail = (
+                                extract_other_detail(
+                                    part
+                                )
+                            )
+
+                            if detail:
+
+                                details.append(
+                                    detail
+                                )
+
+                        return " | ".join(
+                            details
+                        )
+
+                    analysis_df[
+                        other_detail_column
+                    ] = (
+                        raw_df[
+                            column
+                        ]
+                        .apply(
+                            extract_google_other
+                        )
+                    )
 
             metadata.append(
                 {
@@ -652,16 +775,15 @@ def load_google_forms(
                     "internal_columns":
                         internal_columns,
 
+                    "other_detail_column":
+                        other_detail_column,
+
                     "is_feedback":
                         False
                 }
             )
 
             continue
-
-        # ====================================================
-        # SA
-        # ====================================================
 
         if question_type == "SA":
 
@@ -723,16 +845,15 @@ def load_google_forms(
                     "internal_columns":
                         [],
 
+                    "other_detail_column":
+                        None,
+
                     "is_feedback":
                         False
                 }
             )
 
             continue
-
-        # ====================================================
-        # OPEN
-        # ====================================================
 
         if question_type == "Open":
 
@@ -758,6 +879,9 @@ def load_google_forms(
                     "internal_columns":
                         [],
 
+                    "other_detail_column":
+                        None,
+
                     "is_feedback":
                         is_feedback_question(
                             question
@@ -766,10 +890,6 @@ def load_google_forms(
             )
 
             continue
-
-        # ====================================================
-        # CONTACT
-        # ====================================================
 
         if question_type == "Contact":
 
@@ -794,6 +914,9 @@ def load_google_forms(
 
                     "internal_columns":
                         [],
+
+                    "other_detail_column":
+                        None,
 
                     "is_feedback":
                         False
@@ -1016,10 +1139,6 @@ def load_surveymonkey(
         if not question_columns:
             continue
 
-        # ====================================================
-        # CONTACT
-        # ====================================================
-
         if is_phone_question(
             question
         ):
@@ -1050,6 +1169,9 @@ def load_surveymonkey(
                     "internal_columns":
                         [],
 
+                    "other_detail_column":
+                        None,
+
                     "is_feedback":
                         False
                 }
@@ -1057,23 +1179,21 @@ def load_surveymonkey(
 
             continue
 
-        # ====================================================
-        # MULTIPLE PHYSICAL COLUMNS = MA
-        # ====================================================
-
         if len(
             question_columns
         ) > 1:
 
-            options = []
+            normalized_options = []
 
-            internal_columns = []
+            option_source_columns = {}
+
+            other_detail_sources = []
 
             for column in (
                 question_columns
             ):
 
-                option = (
+                raw_option = (
                     clean_surveymonkey_header(
                         column[
                             1
@@ -1081,8 +1201,53 @@ def load_surveymonkey(
                     )
                 )
 
-                if not option:
+                if not raw_option:
                     continue
+
+                option = (
+                    normalize_ma_option(
+                        raw_option
+                    )
+                )
+
+                if (
+                    option
+                    == "Lainnya"
+                ):
+
+                    other_detail_sources.append(
+                        column
+                    )
+
+                if option not in option_source_columns:
+
+                    normalized_options.append(
+                        option
+                    )
+
+                    option_source_columns[
+                        option
+                    ] = []
+
+                option_source_columns[
+                    option
+                ].append(
+                    column
+                )
+
+            options = []
+
+            internal_columns = []
+
+            other_detail_column = None
+
+            for option in normalized_options:
+
+                source_columns = (
+                    option_source_columns[
+                        option
+                    ]
+                )
 
                 options.append(
                     option
@@ -1109,38 +1274,171 @@ def load_surveymonkey(
                     internal_name
                 )
 
+                masks = []
+
+                for source_column in (
+                    source_columns
+                ):
+
+                    source_series = (
+                        raw_df[
+                            source_column
+                        ]
+                    )
+
+                    mask = (
+                        source_series
+                        .apply(
+                            lambda value:
+                                (
+                                    1
+
+                                    if (
+                                        pd.notna(
+                                            value
+                                        )
+                                        and
+                                        str(
+                                            value
+                                        )
+                                        .strip()
+                                        .lower()
+                                        not in [
+                                            "",
+                                            "0",
+                                            "no",
+                                            "false",
+                                            "nan"
+                                        ]
+                                    )
+
+                                    else 0
+                                )
+                        )
+                    )
+
+                    masks.append(
+                        mask
+                    )
+
+                if masks:
+
+                    combined = (
+                        pd.concat(
+                            masks,
+                            axis=1
+                        )
+                        .max(
+                            axis=1
+                        )
+                    )
+
+                else:
+
+                    combined = (
+                        pd.Series(
+                            0,
+                            index=
+                                raw_df.index
+                        )
+                    )
+
                 analysis_df[
                     internal_name
-                ] = (
-                    raw_df[
-                        column
-                    ]
-                    .apply(
-                        lambda value:
-                            (
-                                1
+                ] = combined.astype(
+                    int
+                )
 
-                                if (
-                                    pd.notna(
-                                        value
-                                    )
-                                    and
-                                    str(
-                                        value
-                                    )
-                                    .strip()
-                                    .lower()
-                                    not in [
-                                        "",
-                                        "0",
-                                        "no",
-                                        "false",
-                                        "nan"
-                                    ]
-                                )
+            if (
+                "Lainnya"
+                in options
+                and
+                other_detail_sources
+            ):
 
-                                else 0
+                other_detail_column = (
+                    make_unique_name(
+                        safe_column_name(
+                            f"{question}_Lainnya_Detail"
+                        ),
+                        used_internal_names
+                    )
+                )
+
+                used_internal_names.add(
+                    other_detail_column
+                )
+
+                def collect_surveymonkey_other(
+                    row
+                ):
+
+                    details = []
+
+                    for source_column in (
+                        other_detail_sources
+                    ):
+
+                        value = (
+                            row[
+                                source_column
+                            ]
+                        )
+
+                        if pd.isna(
+                            value
+                        ):
+                            continue
+
+                        text = (
+                            clean_text(
+                                value
                             )
+                        )
+
+                        if not text:
+                            continue
+
+                        if text.lower() in [
+                            "1",
+                            "yes",
+                            "true"
+                        ]:
+                            continue
+
+                        detail = (
+                            extract_other_detail(
+                                text
+                            )
+                        )
+
+                        if detail:
+
+                            details.append(
+                                detail
+                            )
+
+                        elif not is_other_option(
+                            text
+                        ):
+
+                            details.append(
+                                text
+                            )
+
+                    return " | ".join(
+                        dict.fromkeys(
+                            details
+                        )
+                    )
+
+                analysis_df[
+                    other_detail_column
+                ] = (
+                    raw_df
+                    .apply(
+                        collect_surveymonkey_other,
+                        axis=1
                     )
                 )
 
@@ -1164,16 +1462,15 @@ def load_surveymonkey(
                     "internal_columns":
                         internal_columns,
 
+                    "other_detail_column":
+                        other_detail_column,
+
                     "is_feedback":
                         False
                 }
             )
 
             continue
-
-        # ====================================================
-        # SINGLE COLUMN
-        # ====================================================
 
         column = (
             question_columns[
@@ -1198,10 +1495,6 @@ def load_surveymonkey(
                 ]
             )
         )
-
-        # ====================================================
-        # SA
-        # ====================================================
 
         if question_type == "SA":
 
@@ -1263,16 +1556,15 @@ def load_surveymonkey(
                     "internal_columns":
                         [],
 
+                    "other_detail_column":
+                        None,
+
                     "is_feedback":
                         False
                 }
             )
 
             continue
-
-        # ====================================================
-        # OPEN
-        # ====================================================
 
         if question_type == "Open":
 
@@ -1298,6 +1590,9 @@ def load_surveymonkey(
                     "internal_columns":
                         [],
 
+                    "other_detail_column":
+                        None,
+
                     "is_feedback":
                         is_feedback_question(
                             question
@@ -1306,10 +1601,6 @@ def load_surveymonkey(
             )
 
             continue
-
-        # ====================================================
-        # CONTACT
-        # ====================================================
 
         if question_type == "Contact":
 
@@ -1334,6 +1625,9 @@ def load_surveymonkey(
 
                     "internal_columns":
                         [],
+
+                    "other_detail_column":
+                        None,
 
                     "is_feedback":
                         False
