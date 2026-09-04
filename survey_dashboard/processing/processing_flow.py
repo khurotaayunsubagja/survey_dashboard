@@ -89,10 +89,6 @@ def apply_global_filters(
 
             continue
 
-        # ====================================================
-        # SA
-        # ====================================================
-
         if item["type"] == "SA":
 
             column = (
@@ -126,10 +122,6 @@ def apply_global_filters(
                 ]
                 .copy()
             )
-
-        # ====================================================
-        # MA
-        # ====================================================
 
         elif item["type"] == "MA":
 
@@ -273,10 +265,6 @@ def get_filtered_df(
 
         return df.copy()
 
-    # ========================================================
-    # SA
-    # ========================================================
-
     if (
         base_metadata[
             "type"
@@ -313,10 +301,6 @@ def get_filtered_df(
             ]
             .copy()
         )
-
-    # ========================================================
-    # MA
-    # ========================================================
 
     if (
         base_metadata[
@@ -420,10 +404,6 @@ def calculate_variable_analysis(
         ]
     )
 
-    # ========================================================
-    # CONTACT
-    # ========================================================
-
     if question_type == "Contact":
 
         return {
@@ -439,10 +419,6 @@ def calculate_variable_analysis(
             "result":
                 pd.DataFrame()
         }
-
-    # ========================================================
-    # SA
-    # ========================================================
 
     if question_type == "SA":
 
@@ -528,10 +504,6 @@ def calculate_variable_analysis(
                 result
         }
 
-    # ========================================================
-    # MA
-    # ========================================================
-
     if question_type == "MA":
 
         options = (
@@ -546,9 +518,35 @@ def calculate_variable_analysis(
             ]
         )
 
-        base_n = len(
-            df
-        )
+        valid_columns = [
+            column
+            for column
+            in internal_columns
+            if column in df.columns
+        ]
+
+        if valid_columns:
+
+            respondent_mask = (
+                df[
+                    valid_columns
+                ]
+                .apply(
+                    pd.to_numeric,
+                    errors="coerce"
+                )
+                .fillna(0)
+                .sum(axis=1)
+                > 0
+            )
+
+            base_n = int(
+                respondent_mask.sum()
+            )
+
+        else:
+
+            base_n = 0
 
         rows = []
 
@@ -585,7 +583,11 @@ def calculate_variable_analysis(
             )
 
             absolute = int(
-                values.sum()
+                (
+                    values
+                    > 0
+                )
+                .sum()
             )
 
             percentage = (
@@ -626,10 +628,6 @@ def calculate_variable_analysis(
                     rows
                 )
         }
-
-    # ========================================================
-    # OPEN
-    # ========================================================
 
     if question_type == "Open":
 
@@ -708,49 +706,6 @@ def calculate_variable_analysis(
 # CROSSTAB
 # ============================================================
 
-def find_ma_option_column(
-    metadata_item,
-    option
-):
-
-    options = (
-        metadata_item[
-            "options"
-        ]
-    )
-
-    internal_columns = (
-        metadata_item[
-            "internal_columns"
-        ]
-    )
-
-    if option not in options:
-
-        return None
-
-    index = (
-        options.index(
-            option
-        )
-    )
-
-    if (
-        index
-        >= len(
-            internal_columns
-        )
-    ):
-
-        return None
-
-    return (
-        internal_columns[
-            index
-        ]
-    )
-
-
 def calculate_crosstab(
     df,
     row_metadata,
@@ -770,40 +725,19 @@ def calculate_crosstab(
         ]
     )
 
-    if (
-        row_type == "MA"
-        and column_type == "MA"
-    ):
+    if row_type != "SA":
 
         raise ValueError(
-            "MA × MA analysis cannot be performed."
+            "Row Variable must be an SA question."
         )
 
-    if (
-        row_type == "MA"
-        and column_type == "SA"
-    ):
+    if column_type not in [
+        "SA",
+        "MA"
+    ]:
 
         raise ValueError(
-            "MA × SA is not supported. "
-            "Please use SA as Row Variable "
-            "and MA as Column Variable."
-        )
-
-    if (
-        row_type in [
-            "Open",
-            "Contact"
-        ]
-        or column_type in [
-            "Open",
-            "Contact"
-        ]
-    ):
-
-        raise ValueError(
-            "Open-ended or Contact questions "
-            "cannot be used in a crosstab."
+            "Column Variable must be SA or MA."
         )
 
     row_column = (
@@ -826,15 +760,31 @@ def calculate_crosstab(
         }
 
     row_series = (
-        df[row_column]
+        df[
+            row_column
+        ]
         .fillna("")
         .astype(str)
         .str.strip()
     )
 
-    # ========================================================
-    # SA × SA
-    # ========================================================
+    valid_row_mask = (
+        row_series
+        != ""
+    )
+
+    working_df = (
+        df[
+            valid_row_mask
+        ]
+        .copy()
+    )
+
+    row_series = (
+        row_series[
+            valid_row_mask
+        ]
+    )
 
     if column_type == "SA":
 
@@ -844,7 +794,7 @@ def calculate_crosstab(
             ]
         )
 
-        if column_column not in df.columns:
+        if column_column not in working_df.columns:
 
             return {
                 "absolute":
@@ -858,7 +808,7 @@ def calculate_crosstab(
             }
 
         column_series = (
-            df[
+            working_df[
                 column_column
             ]
             .fillna("")
@@ -866,149 +816,181 @@ def calculate_crosstab(
             .str.strip()
         )
 
-        mask = (
-            (row_series != "")
-            &
-            (column_series != "")
-        )
-
-        row_series = (
-            row_series[
-                mask
-            ]
-        )
-
-        column_series = (
-            column_series[
-                mask
-            ]
-        )
-
-        result = (
-            pd.crosstab(
-                row_series,
-                column_series
-            )
-        )
-
-    # ========================================================
-    # SA × MA
-    # ========================================================
-
-    elif column_type == "MA":
-
-        if not column_option:
-
-            raise ValueError(
-                "Please select an MA option."
-            )
-
-        ma_column = (
-            find_ma_option_column(
-                column_metadata,
-                column_option
-            )
-        )
-
-        if ma_column is None:
-
-            return {
-                "absolute":
-                    pd.DataFrame(),
-
-                "percentage":
-                    pd.DataFrame(),
-
-                "base_n":
-                    0
-            }
-
-        ma_series = (
-            pd.to_numeric(
-                df[
-                    ma_column
-                ],
-                errors="coerce"
-            )
-            .fillna(0)
-        )
-
-        mask = (
-            row_series
+        valid_column_mask = (
+            column_series
             != ""
         )
 
-        row_series = (
+        row_valid = (
             row_series[
-                mask
+                valid_column_mask.values
             ]
         )
 
-        ma_series = (
-            ma_series[
-                mask
+        column_valid = (
+            column_series[
+                valid_column_mask
             ]
         )
 
-        result = (
+        absolute = (
             pd.crosstab(
-                row_series,
-                ma_series
+                row_valid,
+                column_valid
             )
         )
 
-        if 1 in result.columns:
-
-            result = (
-                result[
-                    [1]
-                ]
-            )
-
-            result.columns = [
-                column_option
-            ]
-
-        else:
-
-            result = (
-                pd.DataFrame(
-                    0,
-                    index=
-                        result.index,
-                    columns=[
-                        column_option
-                    ]
-                )
-            )
-
-    else:
-
-        raise ValueError(
-            "Unsupported crosstab combination."
+        base_n = len(
+            row_valid
         )
 
-    base_n = len(
-        row_series
-    )
-
-    if base_n > 0:
+        row_base = (
+            absolute.sum(
+                axis=1
+            )
+        )
 
         percentage = (
-            result
-            / base_n
+            absolute
+            .div(
+                row_base.replace(
+                    0,
+                    pd.NA
+                ),
+                axis=0
+            )
+            .fillna(0)
             * 100
         )
 
     else:
 
-        percentage = (
-            result.copy()
+        options = (
+            column_metadata.get(
+                "options",
+                []
+            )
         )
+
+        internal_columns = (
+            column_metadata.get(
+                "internal_columns",
+                []
+            )
+        )
+
+        row_options = (
+            row_series
+            .drop_duplicates()
+            .tolist()
+        )
+
+        absolute = (
+            pd.DataFrame(
+                0,
+                index=
+                    row_options,
+                columns=
+                    options,
+                dtype=int
+            )
+        )
+
+        row_base = (
+            row_series
+            .value_counts()
+            .reindex(
+                row_options
+            )
+            .fillna(0)
+        )
+
+        for option_index, option in enumerate(
+            options
+        ):
+
+            if (
+                option_index
+                >= len(
+                    internal_columns
+                )
+            ):
+                continue
+
+            ma_column = (
+                internal_columns[
+                    option_index
+                ]
+            )
+
+            if (
+                ma_column
+                not in working_df.columns
+            ):
+                continue
+
+            values = (
+                pd.to_numeric(
+                    working_df[
+                        ma_column
+                    ],
+                    errors="coerce"
+                )
+                .fillna(0)
+            )
+
+            for row_option in row_options:
+
+                segment_mask = (
+                    row_series
+                    == row_option
+                )
+
+                absolute.loc[
+                    row_option,
+                    option
+                ] = int(
+                    (
+                        values[
+                            segment_mask.values
+                        ]
+                        > 0
+                    )
+                    .sum()
+                )
+
+        base_n = len(
+            working_df
+        )
+
+        percentage = (
+            absolute
+            .div(
+                row_base.replace(
+                    0,
+                    pd.NA
+                ),
+                axis=0
+            )
+            .fillna(0)
+            * 100
+        )
+
+    absolute.index.name = (
+        row_metadata[
+            "question"
+        ]
+    )
+
+    percentage.index.name = (
+        row_metadata[
+            "question"
+        ]
+    )
 
     return {
         "absolute":
-            result,
+            absolute,
 
         "percentage":
             percentage,
@@ -1081,7 +1063,71 @@ def collect_open_feedback(
                 ],
 
             "Open Feedback":
-                series
+                series.values
+        }
+    )
+
+
+# ============================================================
+# MA OTHER DETAIL
+# ============================================================
+
+def collect_ma_other_details(
+    df,
+    metadata_item
+):
+
+    if (
+        metadata_item.get(
+            "type"
+        )
+        != "MA"
+    ):
+
+        return pd.DataFrame(
+            columns=[
+                "Other Response"
+            ]
+        )
+
+    other_detail_column = (
+        metadata_item.get(
+            "other_detail_column"
+        )
+    )
+
+    if (
+        not other_detail_column
+        or
+        other_detail_column
+        not in df.columns
+    ):
+
+        return pd.DataFrame(
+            columns=[
+                "Other Response"
+            ]
+        )
+
+    series = (
+        df[
+            other_detail_column
+        ]
+        .dropna()
+        .astype(str)
+        .str.strip()
+    )
+
+    series = (
+        series[
+            series != ""
+        ]
+    )
+
+    return pd.DataFrame(
+        {
+            "Other Response":
+                series.values
         }
     )
 
