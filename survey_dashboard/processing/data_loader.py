@@ -3,13 +3,20 @@ import re
 
 
 # ============================================================
-# TEXT HELPERS
+# BASIC HELPERS
 # ============================================================
 
+def is_blank(value):
+
+    if pd.isna(value):
+        return True
+
+    text = str(value).strip()
+
+    return text == ""
+
+
 def clean_text(value):
-    """
-    Membersihkan teks dari spasi berlebih.
-    """
 
     if pd.isna(value):
         return ""
@@ -26,9 +33,6 @@ def clean_text(value):
 
 
 def safe_column_name(value):
-    """
-    Mengubah teks menjadi nama kolom internal yang aman.
-    """
 
     text = clean_text(value)
 
@@ -54,9 +58,6 @@ def make_unique_name(
     base_name,
     existing_names
 ):
-    """
-    Mencegah nama kolom internal yang sama.
-    """
 
     if base_name not in existing_names:
         return base_name
@@ -67,22 +68,17 @@ def make_unique_name(
         f"{base_name}_{counter}"
         in existing_names
     ):
+
         counter += 1
 
     return f"{base_name}_{counter}"
 
 
 # ============================================================
-# QUESTION TYPE HELPERS
+# PHONE / CONTACT DETECTION
 # ============================================================
 
 def is_phone_question(question):
-    """
-    Mendeteksi pertanyaan nomor HP / WhatsApp / telepon.
-
-    Pertanyaan seperti ini akan diberi tipe 'Contact',
-    bukan 'Open', supaya tidak ikut Open Feedback.
-    """
 
     text = clean_text(
         question
@@ -93,6 +89,7 @@ def is_phone_question(question):
         "no hp",
         "no. hp",
         "no.hp",
+        "no.h.p",
         "nomor handphone",
         "no handphone",
         "nomor telepon",
@@ -118,51 +115,85 @@ def is_phone_question(question):
     )
 
 
-def is_open_question_hint(question):
-    """
-    Mendeteksi pertanyaan yang secara struktur
-    kemungkinan besar merupakan pertanyaan terbuka.
+# ============================================================
+# OPEN QUESTION DETECTION
+# ============================================================
 
-    Fungsi ini sangat membantu untuk kolom seperti:
-    - Saran
-    - Masukan
-    - Kritik
-    - Feedback
-    - Alasan
-    - Jelaskan...
-    - Mengapa...
-    """
+def is_name_question(question):
+
+    text = clean_text(
+        question
+    ).lower()
+
+    name_keywords = [
+        "nama anda",
+        "nama lengkap",
+        "nama responden",
+        "nama kamu",
+        "siapa nama",
+        "your name",
+        "full name",
+        "respondent name"
+    ]
+
+    return any(
+        keyword in text
+        for keyword in name_keywords
+    )
+
+
+def is_feedback_question(question):
+
+    text = clean_text(
+        question
+    ).lower()
+
+    feedback_keywords = [
+        "saran",
+        "masukan",
+        "kritik",
+        "feedback",
+        "komentar",
+        "keluhan",
+        "tanggapan",
+        "suggestion",
+        "comment",
+        "complaint"
+    ]
+
+    return any(
+        keyword in text
+        for keyword in feedback_keywords
+    )
+
+
+def is_open_question_hint(question):
 
     text = clean_text(
         question
     ).lower()
 
     open_keywords = [
-        "saran",
-        "masukan",
-        "kritik",
-        "feedback",
-        "komentar",
-        "comment",
-        "suggestion",
-        "pendapat",
-        "tanggapan",
-        "keluhan",
         "ceritakan",
-        "jelaskan",
-        "sebutkan",
+        "jelaskan secara",
         "tuliskan",
-        "mengapa",
-        "kenapa",
-        "apa alasan",
-        "alasannya",
-        "reason",
-        "describe",
-        "explain",
+        "please explain",
+        "please describe",
         "tell us",
+        "describe your",
         "open ended",
         "open-ended"
     ]
+
+    if is_name_question(
+        question
+    ):
+        return True
+
+    if is_feedback_question(
+        question
+    ):
+        return True
 
     return any(
         keyword in text
@@ -170,67 +201,70 @@ def is_open_question_hint(question):
     )
 
 
-def is_surveymonkey_open_header(header):
-    """
-    SurveyMonkey sering memberikan header kedua seperti:
-    'Open-Ended Response'.
+# ============================================================
+# GOOGLE FORMS MA OPTION NORMALIZATION
+# ============================================================
 
-    Header tersebut harus dibaca sebagai Open,
-    bukan SA.
-    """
+def normalize_google_ma_option(option):
 
     text = clean_text(
-        header
-    ).lower()
+        option
+    )
 
-    open_headers = [
-        "open-ended response",
-        "open ended response",
-        "open-ended",
-        "open ended",
-        "comment",
-        "comments",
-        "other response",
-        "other (please specify)",
-        "please specify",
-        "response text",
-        "text response"
+    text_lower = (
+        text.lower()
+    )
+
+    other_prefixes = [
+        "lainnya",
+        "lain-lain",
+        "other",
+        "others"
     ]
 
-    return any(
-        keyword in text
-        for keyword in open_headers
-    )
+    for prefix in (
+        other_prefixes
+    ):
+
+        if text_lower.startswith(
+            prefix
+        ):
+
+            return "Lainnya"
+
+    return text
 
 
 # ============================================================
-# GOOGLE FORMS TYPE DETECTION
+# GOOGLE FORMS QUESTION TYPE
 # ============================================================
 
 def detect_google_question_type(
     series,
     question=""
 ):
-    """
-    Mendeteksi tipe pertanyaan Google Forms:
-    SA, MA, atau Open.
 
-    Nama pertanyaan diprioritaskan supaya pertanyaan
-    seperti 'Saran' tidak salah dianggap SA.
-    """
+    # ========================================================
+    # CONTACT
+    # ========================================================
 
-    # --------------------------------------------------------
-    # Contact
-    # --------------------------------------------------------
-
-    if is_phone_question(question):
+    if is_phone_question(
+        question
+    ):
         return "Contact"
 
-    # --------------------------------------------------------
-    # Strong Open Question hint
-    # --------------------------------------------------------
+    # ========================================================
+    # DEFINITE OPEN
+    # ========================================================
 
-    if is_open_question_hint(question):
+    if is_name_question(
+        question
+    ):
+        return "Open"
+
+    if is_feedback_question(
+        question
+    ):
         return "Open"
 
     values = (
@@ -240,18 +274,20 @@ def detect_google_question_type(
         .str.strip()
     )
 
-    values = values[
-        values != ""
-    ]
+    values = (
+        values[
+            values != ""
+        ]
+    )
 
     if values.empty:
         return "SA"
 
-    # --------------------------------------------------------
-    # Basic statistics
-    # --------------------------------------------------------
-
-    total_values = len(values)
+    total_rows = (
+        len(
+            values
+        )
+    )
 
     unique_count = (
         values.nunique()
@@ -259,107 +295,205 @@ def detect_google_question_type(
 
     unique_ratio = (
         unique_count
-        / max(total_values, 1)
+        / max(
+            total_rows,
+            1
+        )
     )
 
     average_length = (
-        values.str.len().mean()
-    )
-
-    comma_ratio = (
         values
-        .str.contains(
-            ",",
-            regex=False
-        )
+        .str.len()
         .mean()
     )
 
-    # --------------------------------------------------------
-    # Open text heuristic
-    # --------------------------------------------------------
-    # Jawaban sangat bervariasi dan cukup panjang
-    # biasanya merupakan pertanyaan terbuka.
-    # --------------------------------------------------------
+    # ========================================================
+    # GOOGLE FORMS MA DETECTION
+    # ========================================================
+    # Google Forms MA biasanya berada dalam satu kolom:
+    #
+    # "Harga, Kecepatan, Lokasi"
+    #
+    # Koma saja tidak cukup, sehingga diperiksa juga:
+    # - jumlah row dengan >1 jawaban
+    # - pengulangan opsi antar responden
+    # - panjang rata-rata opsi
+    # ========================================================
 
-    if (
-        unique_ratio >= 0.65
-        and average_length >= 18
-    ):
-        return "Open"
+    rows_with_multiple = 0
 
-    # --------------------------------------------------------
-    # Multiple Answer heuristic
-    # --------------------------------------------------------
+    split_options = []
 
-    if comma_ratio >= 0.20:
+    for value in values:
 
-        all_tokens = []
+        parts = [
+            normalize_google_ma_option(
+                part
+            )
 
-        for value in values:
+            for part
+            in str(value).split(",")
 
-            tokens = [
-                clean_text(x).lower()
-                for x in str(value).split(",")
-                if clean_text(x)
+            if clean_text(
+                part
+            )
+        ]
+
+        if len(parts) >= 2:
+
+            rows_with_multiple += 1
+
+        split_options.extend(
+            [
+                part.lower()
+                for part
+                in parts
             ]
-
-            all_tokens.extend(tokens)
-
-        unique_tokens = len(
-            set(all_tokens)
         )
 
-        # MA biasanya memiliki vocabulary jawaban terbatas.
-        if unique_tokens <= max(
-            30,
-            unique_count * 3
+    multi_row_ratio = (
+        rows_with_multiple
+        / max(
+            total_rows,
+            1
+        )
+    )
+
+    if (
+        rows_with_multiple > 0
+        and
+        split_options
+    ):
+
+        split_series = (
+            pd.Series(
+                split_options
+            )
+        )
+
+        total_split = (
+            len(
+                split_series
+            )
+        )
+
+        unique_split = (
+            split_series.nunique()
+        )
+
+        repeated_ratio = (
+            1
+            -
+            (
+                unique_split
+                / max(
+                    total_split,
+                    1
+                )
+            )
+        )
+
+        average_option_length = (
+            split_series
+            .str.len()
+            .mean()
+        )
+
+        if (
+            multi_row_ratio >= 0.10
+            and
+            repeated_ratio >= 0.30
+            and
+            average_option_length <= 80
         ):
+
             return "MA"
+
+    # ========================================================
+    # OPEN TEXT FALLBACK
+    # ========================================================
+    # Jangan menebak Open hanya dari kata "Mengapa/Kenapa".
+    # Open ditentukan dari pola jawaban bebas yang sangat unik
+    # dan relatif panjang.
+    # ========================================================
+
+    if (
+        unique_ratio >= 0.90
+        and
+        average_length >= 60
+    ):
+
+        return "Open"
+
+    # ========================================================
+    # DEFAULT = SA
+    # ========================================================
 
     return "SA"
 
 
+# ============================================================
+# GOOGLE FORMS MA OPTIONS
+# ============================================================
+
 def parse_google_ma_options(series):
-    """
-    Mengambil seluruh opsi MA dari Google Forms.
-    """
 
     options = []
+
+    seen = set()
 
     for value in series:
 
         if pd.isna(value):
             continue
 
-        text = str(value).strip()
+        text = str(
+            value
+        ).strip()
 
         if not text:
             continue
 
         parts = [
-            clean_text(x)
-            for x in text.split(",")
-            if clean_text(x)
+            normalize_google_ma_option(
+                part
+            )
+
+            for part
+            in text.split(",")
+
+            if clean_text(
+                part
+            )
         ]
 
-        options.extend(parts)
+        for option in parts:
 
-    return sorted(
-        set(options)
-    )
+            key = (
+                option.lower()
+            )
+
+            if key in seen:
+                continue
+
+            seen.add(
+                key
+            )
+
+            options.append(
+                option
+            )
+
+    return options
 
 
 # ============================================================
-# GOOGLE FORMS LOADER
+# LOAD GOOGLE FORMS
 # ============================================================
 
 def load_google_forms(
     uploaded_file
 ):
-    """
-    Membaca data Google Forms.
-    """
 
     raw_df = pd.read_excel(
         uploaded_file,
@@ -367,63 +501,54 @@ def load_google_forms(
         dtype=str
     )
 
-    raw_df = raw_df.copy()
+    raw_df = (
+        raw_df.copy()
+    )
 
-    analysis_df = raw_df.copy()
+    analysis_df = (
+        raw_df.copy()
+    )
 
-    respondent_count = len(
-        raw_df
+    respondent_count = (
+        len(
+            raw_df
+        )
     )
 
     metadata = []
 
     used_internal_names = set()
 
-    # ========================================================
-    # LOOP QUESTIONS
-    # ========================================================
+    for column in (
+        raw_df.columns
+    ):
 
-    for column in raw_df.columns:
-
-        question = clean_text(
-            column
+        question = (
+            clean_text(
+                column
+            )
         )
 
         question_type = (
             detect_google_question_type(
-                raw_df[column],
+                raw_df[
+                    column
+                ],
                 question
             )
         )
 
         # ====================================================
-        # CONTACT
-        # ====================================================
-
-        if question_type == "Contact":
-
-            metadata.append(
-                {
-                    "question": question,
-                    "type": "Contact",
-                    "options": [],
-                    "source_column": column,
-                    "source_columns": [column],
-                    "internal_columns": []
-                }
-            )
-
-            continue
-
-        # ====================================================
-        # MULTIPLE ANSWER
+        # MA
         # ====================================================
 
         if question_type == "MA":
 
             options = (
                 parse_google_ma_options(
-                    raw_df[column]
+                    raw_df[
+                        column
+                    ]
                 )
             )
 
@@ -431,8 +556,10 @@ def load_google_forms(
 
             for option in options:
 
-                base_name = safe_column_name(
-                    f"{question}_{option}"
+                base_name = (
+                    safe_column_name(
+                        f"{question}_{option}"
+                    )
                 )
 
                 internal_name = (
@@ -451,7 +578,9 @@ def load_google_forms(
                 )
 
                 target_option = (
-                    clean_text(option)
+                    normalize_google_ma_option(
+                        option
+                    )
                     .lower()
                 )
 
@@ -460,7 +589,9 @@ def load_google_forms(
                     target=target_option
                 ):
 
-                    if pd.isna(value):
+                    if pd.isna(
+                        value
+                    ):
                         return 0
 
                     text = str(
@@ -471,9 +602,17 @@ def load_google_forms(
                         return 0
 
                     answers = [
-                        clean_text(x).lower()
-                        for x in text.split(",")
-                        if clean_text(x)
+                        normalize_google_ma_option(
+                            part
+                        )
+                        .lower()
+
+                        for part
+                        in text.split(",")
+
+                        if clean_text(
+                            part
+                        )
                     ]
 
                     return int(
@@ -483,60 +622,185 @@ def load_google_forms(
                 analysis_df[
                     internal_name
                 ] = (
-                    raw_df[column]
-                    .apply(parse_answer)
+                    raw_df[
+                        column
+                    ]
+                    .apply(
+                        parse_answer
+                    )
                 )
 
             metadata.append(
                 {
-                    "question": question,
-                    "type": "MA",
-                    "options": options,
-                    "source_column": column,
-                    "source_columns": [column],
+                    "question":
+                        question,
+
+                    "type":
+                        "MA",
+
+                    "options":
+                        options,
+
+                    "source_column":
+                        column,
+
+                    "source_columns":
+                        [
+                            column
+                        ],
+
                     "internal_columns":
-                        internal_columns
+                        internal_columns,
+
+                    "is_feedback":
+                        False
                 }
             )
 
             continue
 
         # ====================================================
-        # SINGLE ANSWER
+        # SA
         # ====================================================
 
         if question_type == "SA":
 
+            options = []
+
+            seen = set()
+
             values = (
-                raw_df[column]
+                raw_df[
+                    column
+                ]
                 .dropna()
                 .astype(str)
                 .str.strip()
             )
 
-            options = sorted(
-                [
-                    value
-                    for value
-                    in values.unique()
-                    if value != ""
+            values = (
+                values[
+                    values != ""
                 ]
             )
 
-        else:
+            for value in values:
 
-            options = []
+                key = (
+                    value.lower()
+                )
 
-        metadata.append(
-            {
-                "question": question,
-                "type": question_type,
-                "options": options,
-                "source_column": column,
-                "source_columns": [column],
-                "internal_columns": []
-            }
-        )
+                if key in seen:
+                    continue
+
+                seen.add(
+                    key
+                )
+
+                options.append(
+                    value
+                )
+
+            metadata.append(
+                {
+                    "question":
+                        question,
+
+                    "type":
+                        "SA",
+
+                    "options":
+                        options,
+
+                    "source_column":
+                        column,
+
+                    "source_columns":
+                        [
+                            column
+                        ],
+
+                    "internal_columns":
+                        [],
+
+                    "is_feedback":
+                        False
+                }
+            )
+
+            continue
+
+        # ====================================================
+        # OPEN
+        # ====================================================
+
+        if question_type == "Open":
+
+            metadata.append(
+                {
+                    "question":
+                        question,
+
+                    "type":
+                        "Open",
+
+                    "options":
+                        [],
+
+                    "source_column":
+                        column,
+
+                    "source_columns":
+                        [
+                            column
+                        ],
+
+                    "internal_columns":
+                        [],
+
+                    "is_feedback":
+                        is_feedback_question(
+                            question
+                        )
+                }
+            )
+
+            continue
+
+        # ====================================================
+        # CONTACT
+        # ====================================================
+
+        if question_type == "Contact":
+
+            metadata.append(
+                {
+                    "question":
+                        question,
+
+                    "type":
+                        "Contact",
+
+                    "options":
+                        [],
+
+                    "source_column":
+                        column,
+
+                    "source_columns":
+                        [
+                            column
+                        ],
+
+                    "internal_columns":
+                        [],
+
+                    "is_feedback":
+                        False
+                }
+            )
+
+            continue
 
     return (
         raw_df,
@@ -553,9 +817,6 @@ def load_google_forms(
 def clean_surveymonkey_header(
     value
 ):
-    """
-    Membersihkan header SurveyMonkey.
-    """
 
     if pd.isna(value):
         return ""
@@ -564,12 +825,43 @@ def clean_surveymonkey_header(
         value
     ).strip()
 
-    if text.lower().startswith(
-        "unnamed"
+    if (
+        text.lower()
+        .startswith(
+            "unnamed"
+        )
     ):
         return ""
 
     return text
+
+
+def is_surveymonkey_open_header(
+    value
+):
+
+    text = clean_text(
+        value
+    ).lower()
+
+    open_headers = [
+        "open-ended response",
+        "open ended response",
+        "open-ended",
+        "open ended",
+        "text response",
+        "response text",
+        "comment",
+        "comments",
+        "other response",
+        "other (please specify)",
+        "please specify"
+    ]
+
+    return any(
+        keyword in text
+        for keyword in open_headers
+    )
 
 
 def detect_surveymonkey_single_type(
@@ -577,31 +869,21 @@ def detect_surveymonkey_single_type(
     second_header,
     series
 ):
-    """
-    Mendeteksi tipe pertanyaan SurveyMonkey
-    yang hanya memiliki satu kolom.
 
-    Ini memperbaiki masalah:
-    Open-Ended Response sebelumnya dianggap SA.
-    """
-
-    # --------------------------------------------------------
-    # Nomor HP
-    # --------------------------------------------------------
-
-    if is_phone_question(question):
+    if is_phone_question(
+        question
+    ):
         return "Contact"
 
-    # --------------------------------------------------------
-    # Nama pertanyaan jelas menunjukkan Open
-    # --------------------------------------------------------
-
-    if is_open_question_hint(question):
+    if is_name_question(
+        question
+    ):
         return "Open"
 
-    # --------------------------------------------------------
-    # Header kedua SurveyMonkey menunjukkan Open
-    # --------------------------------------------------------
+    if is_feedback_question(
+        question
+    ):
+        return "Open"
 
     if is_surveymonkey_open_header(
         second_header
@@ -615,29 +897,39 @@ def detect_surveymonkey_single_type(
         .str.strip()
     )
 
-    values = values[
-        values != ""
-    ]
+    values = (
+        values[
+            values != ""
+        ]
+    )
 
     if values.empty:
+
+        if not second_header:
+            return "Open"
+
         return "SA"
 
     unique_ratio = (
         values.nunique()
-        / max(len(values), 1)
+        / max(
+            len(
+                values
+            ),
+            1
+        )
     )
 
     average_length = (
-        values.str.len().mean()
+        values
+        .str.len()
+        .mean()
     )
 
-    # --------------------------------------------------------
-    # Fallback Open Detection
-    # --------------------------------------------------------
-
     if (
-        unique_ratio >= 0.65
-        and average_length >= 18
+        unique_ratio >= 0.90
+        and
+        average_length >= 60
     ):
         return "Open"
 
@@ -645,68 +937,80 @@ def detect_surveymonkey_single_type(
 
 
 # ============================================================
-# SURVEYMONKEY LOADER
+# LOAD SURVEYMONKEY
 # ============================================================
 
 def load_surveymonkey(
     uploaded_file
 ):
-    """
-    Membaca data SurveyMonkey dengan 2 baris header.
-    """
 
     raw_df = pd.read_excel(
         uploaded_file,
-        header=[0, 1],
+        header=[
+            0,
+            1
+        ],
         dtype=str
     )
 
-    raw_df = raw_df.copy()
+    raw_df = (
+        raw_df.copy()
+    )
 
-    analysis_df = raw_df.copy()
+    analysis_df = (
+        raw_df.copy()
+    )
 
-    respondent_count = len(
-        raw_df
+    respondent_count = (
+        len(
+            raw_df
+        )
     )
 
     metadata = []
 
     used_internal_names = set()
 
-    # ========================================================
-    # GET UNIQUE QUESTIONS
-    # ========================================================
-
     questions = []
 
-    for column in raw_df.columns:
+    for column in (
+        raw_df.columns
+    ):
 
         question = (
             clean_surveymonkey_header(
-                column[0]
+                column[
+                    0
+                ]
             )
         )
 
         if (
             question
-            and question not in questions
+            and
+            question not in questions
         ):
+
             questions.append(
                 question
             )
-
-    # ========================================================
-    # PROCESS QUESTION
-    # ========================================================
 
     for question in questions:
 
         question_columns = [
             column
-            for column in raw_df.columns
-            if clean_surveymonkey_header(
-                column[0]
-            ) == question
+
+            for column
+            in raw_df.columns
+
+            if (
+                clean_surveymonkey_header(
+                    column[
+                        0
+                    ]
+                )
+                == question
+            )
         ]
 
         if not question_columns:
@@ -716,41 +1020,64 @@ def load_surveymonkey(
         # CONTACT
         # ====================================================
 
-        if is_phone_question(question):
+        if is_phone_question(
+            question
+        ):
 
             column = (
-                question_columns[0]
+                question_columns[
+                    0
+                ]
             )
 
             metadata.append(
                 {
-                    "question": question,
-                    "type": "Contact",
-                    "options": [],
-                    "source_column": column,
+                    "question":
+                        question,
+
+                    "type":
+                        "Contact",
+
+                    "options":
+                        [],
+
+                    "source_column":
+                        column,
+
                     "source_columns":
                         question_columns,
-                    "internal_columns": []
+
+                    "internal_columns":
+                        [],
+
+                    "is_feedback":
+                        False
                 }
             )
 
             continue
 
         # ====================================================
-        # MULTIPLE COLUMNS = MA
+        # MULTIPLE PHYSICAL COLUMNS = MA
         # ====================================================
 
-        if len(question_columns) > 1:
+        if len(
+            question_columns
+        ) > 1:
 
             options = []
 
             internal_columns = []
 
-            for column in question_columns:
+            for column in (
+                question_columns
+            ):
 
                 option = (
                     clean_surveymonkey_header(
-                        column[1]
+                        column[
+                            1
+                        ]
                     )
                 )
 
@@ -785,36 +1112,60 @@ def load_surveymonkey(
                 analysis_df[
                     internal_name
                 ] = (
-                    raw_df[column]
+                    raw_df[
+                        column
+                    ]
                     .apply(
                         lambda value:
-                            1
-                            if (
-                                pd.notna(value)
-                                and clean_text(value)
-                                not in [
-                                    "",
-                                    "0",
-                                    "No",
-                                    "NO",
-                                    "False",
-                                    "FALSE"
-                                ]
+                            (
+                                1
+
+                                if (
+                                    pd.notna(
+                                        value
+                                    )
+                                    and
+                                    str(
+                                        value
+                                    )
+                                    .strip()
+                                    .lower()
+                                    not in [
+                                        "",
+                                        "0",
+                                        "no",
+                                        "false",
+                                        "nan"
+                                    ]
+                                )
+
+                                else 0
                             )
-                            else 0
                     )
                 )
 
             metadata.append(
                 {
-                    "question": question,
-                    "type": "MA",
-                    "options": options,
-                    "source_column": None,
+                    "question":
+                        question,
+
+                    "type":
+                        "MA",
+
+                    "options":
+                        options,
+
+                    "source_column":
+                        None,
+
                     "source_columns":
                         question_columns,
+
                     "internal_columns":
-                        internal_columns
+                        internal_columns,
+
+                    "is_feedback":
+                        False
                 }
             )
 
@@ -825,59 +1176,171 @@ def load_surveymonkey(
         # ====================================================
 
         column = (
-            question_columns[0]
+            question_columns[
+                0
+            ]
         )
 
         second_header = (
             clean_surveymonkey_header(
-                column[1]
+                column[
+                    1
+                ]
             )
         )
 
         question_type = (
             detect_surveymonkey_single_type(
-                question=question,
-                second_header=second_header,
-                series=raw_df[column]
+                question,
+                second_header,
+                raw_df[
+                    column
+                ]
             )
         )
 
         # ====================================================
-        # SA OPTIONS
+        # SA
         # ====================================================
 
         if question_type == "SA":
 
+            options = []
+
+            seen = set()
+
             values = (
-                raw_df[column]
+                raw_df[
+                    column
+                ]
                 .dropna()
                 .astype(str)
                 .str.strip()
             )
 
-            options = sorted(
-                [
-                    value
-                    for value
-                    in values.unique()
-                    if value != ""
+            values = (
+                values[
+                    values != ""
                 ]
             )
 
-        else:
+            for value in values:
 
-            options = []
+                key = (
+                    value.lower()
+                )
 
-        metadata.append(
-            {
-                "question": question,
-                "type": question_type,
-                "options": options,
-                "source_column": column,
-                "source_columns": [column],
-                "internal_columns": []
-            }
-        )
+                if key in seen:
+                    continue
+
+                seen.add(
+                    key
+                )
+
+                options.append(
+                    value
+                )
+
+            metadata.append(
+                {
+                    "question":
+                        question,
+
+                    "type":
+                        "SA",
+
+                    "options":
+                        options,
+
+                    "source_column":
+                        column,
+
+                    "source_columns":
+                        [
+                            column
+                        ],
+
+                    "internal_columns":
+                        [],
+
+                    "is_feedback":
+                        False
+                }
+            )
+
+            continue
+
+        # ====================================================
+        # OPEN
+        # ====================================================
+
+        if question_type == "Open":
+
+            metadata.append(
+                {
+                    "question":
+                        question,
+
+                    "type":
+                        "Open",
+
+                    "options":
+                        [],
+
+                    "source_column":
+                        column,
+
+                    "source_columns":
+                        [
+                            column
+                        ],
+
+                    "internal_columns":
+                        [],
+
+                    "is_feedback":
+                        is_feedback_question(
+                            question
+                        )
+                }
+            )
+
+            continue
+
+        # ====================================================
+        # CONTACT
+        # ====================================================
+
+        if question_type == "Contact":
+
+            metadata.append(
+                {
+                    "question":
+                        question,
+
+                    "type":
+                        "Contact",
+
+                    "options":
+                        [],
+
+                    "source_column":
+                        column,
+
+                    "source_columns":
+                        [
+                            column
+                        ],
+
+                    "internal_columns":
+                        [],
+
+                    "is_feedback":
+                        False
+                }
+            )
+
+            continue
 
     return (
         raw_df,
@@ -895,9 +1358,6 @@ def load_survey_data(
     uploaded_file,
     platform
 ):
-    """
-    Main function untuk membaca dataset berdasarkan platform.
-    """
 
     if platform == "Google Forms":
 
@@ -912,5 +1372,5 @@ def load_survey_data(
         )
 
     raise ValueError(
-        "Unsupported survey platform."
+        "Unsupported platform."
     )
