@@ -2,9 +2,13 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 import hashlib
-import vl_convert as vlc
 
 from io import BytesIO
+
+try:
+    import vl_convert as vlc
+except ImportError:
+    vlc = None
 
 from processing.data_loader import (
     load_survey_data
@@ -50,16 +54,13 @@ st.html(
     .hero {
         padding: 28px 32px;
         border-radius: 20px;
-
         background: linear-gradient(
             135deg,
             #667eea 0%,
             #764ba2 100%
         );
-
         color: white;
         margin-bottom: 25px;
-
         box-shadow:
             0 10px 30px rgba(
                 0,
@@ -83,13 +84,10 @@ st.html(
     .metric-card {
         padding: 20px;
         border-radius: 18px;
-
         background-color:
             var(--secondary-background-color);
-
         color:
             var(--text-color);
-
         border:
             1px solid rgba(
                 128,
@@ -97,7 +95,6 @@ st.html(
                 128,
                 0.22
             );
-
         box-shadow:
             0 6px 20px rgba(
                 0,
@@ -126,13 +123,10 @@ st.html(
     .section-card {
         background-color:
             var(--secondary-background-color);
-
         color:
             var(--text-color);
-
         padding: 22px;
         border-radius: 18px;
-
         border:
             1px solid rgba(
                 128,
@@ -140,9 +134,7 @@ st.html(
                 128,
                 0.22
             );
-
         margin-bottom: 20px;
-
         box-shadow:
             0 5px 18px rgba(
                 0,
@@ -204,54 +196,22 @@ st.html(
     .info-box {
         padding: 15px 18px;
         border-radius: 14px;
-
         background-color:
             var(--secondary-background-color);
-
         color:
             var(--text-color);
-
         border-left:
             5px solid #667eea;
-
         margin: 12px 0;
-    }
-
-    hr {
-        border: none;
-
-        border-top:
-            1px solid rgba(
-                128,
-                128,
-                128,
-                0.20
-            );
-
-        margin: 25px 0;
-    }
-
-    .stButton > button {
-        border-radius: 12px;
-        font-weight: 700;
-        min-height: 42px;
-    }
-
-    [data-testid="stDataFrame"] {
-        border-radius: 12px;
-        overflow: hidden;
     }
 
     .analysis-card {
         background-color:
             var(--secondary-background-color);
-
         color:
             var(--text-color);
-
         padding: 14px 18px;
         border-radius: 16px;
-
         border:
             1px solid rgba(
                 128,
@@ -259,9 +219,7 @@ st.html(
                 128,
                 0.22
             );
-
         margin-bottom: 12px;
-
         box-shadow:
             0 4px 14px rgba(
                 0,
@@ -275,14 +233,10 @@ st.html(
         font-size: 16px;
         font-weight: 750;
         margin-bottom: 3px;
-
         color:
             var(--text-color);
-
         white-space: normal;
         overflow-wrap: anywhere;
-        word-break: normal;
-
         line-height: 1.45;
         min-height: 46px;
     }
@@ -293,20 +247,12 @@ st.html(
         opacity: 0.65;
     }
 
-    div[data-testid="stExpander"] {
-        margin-top: -4px;
-        margin-bottom: 4px;
-    }
-
     .feedback-container {
         height: 520px;
         overflow-y: auto;
-
         padding: 14px;
-
         background-color:
             var(--secondary-background-color);
-
         border:
             1px solid rgba(
                 128,
@@ -314,19 +260,15 @@ st.html(
                 128,
                 0.22
             );
-
         border-radius: 16px;
-
         margin-top: 10px;
     }
 
     .feedback-card {
         background-color:
             var(--background-color);
-
         color:
             var(--text-color);
-
         border:
             1px solid rgba(
                 128,
@@ -334,71 +276,43 @@ st.html(
                 128,
                 0.18
             );
-
         border-radius: 12px;
-
         padding: 15px 17px;
-
         margin-bottom: 12px;
     }
 
     .feedback-number {
         font-size: 12px;
         font-weight: 700;
-
         color:
             var(--text-color);
-
         opacity: 0.55;
-
         margin-bottom: 5px;
     }
 
     .feedback-question {
         font-size: 13px;
         font-weight: 700;
-
         color:
             var(--text-color);
-
         opacity: 0.75;
-
         font-style: italic;
-
         margin-bottom: 8px;
     }
 
     .feedback-text {
         font-size: 15px;
-
         color:
             var(--text-color);
-
         line-height: 1.65;
-
         white-space: normal;
         overflow-wrap: anywhere;
-        word-break: normal;
     }
 
-    div[data-testid="stButton"] button[kind="secondary"] {
-        background-color: #4F6D8A;
-        color: white;
-
-        border:
-            1px solid #4F6D8A;
-
+    .stButton > button {
         border-radius: 12px;
-
         font-weight: 700;
-    }
-
-    div[data-testid="stButton"] button[kind="secondary"]:hover {
-        background-color: #3F5B75;
-        color: white;
-
-        border:
-            1px solid #3F5B75;
+        min-height: 42px;
     }
 
     </style>
@@ -430,8 +344,14 @@ DEFAULT_STATE = {
     "raw_df": None,
     "analysis_df": None,
     "metadata": None,
+
     "respondent_count": 0,
     "platform": None,
+    "selected_sheet": None,
+
+    "source_file_bytes": None,
+    "source_file_name": None,
+
     "data_loaded": False,
 
     "active_questions": [],
@@ -449,6 +369,8 @@ DEFAULT_STATE = {
     "crosstab_results": [],
     "variable_analysis_result": {},
 
+    "comparison_result": None,
+
     "current_step": 0,
     "change_step_requested": False
 }
@@ -458,13 +380,11 @@ for key, value in DEFAULT_STATE.items():
 
     if key not in st.session_state:
 
-        st.session_state[
-            key
-        ] = value
+        st.session_state[key] = value
 
 
 # ============================================================
-# HELPERS
+# GENERAL HELPERS
 # ============================================================
 
 def make_widget_key(
@@ -474,9 +394,7 @@ def make_widget_key(
 
     digest = (
         hashlib.md5(
-            str(
-                value
-            )
+            str(value)
             .encode(
                 "utf-8"
             )
@@ -489,15 +407,29 @@ def make_widget_key(
     )
 
 
+def get_sheet_names(
+    file_bytes
+):
+
+    if not file_bytes:
+        return []
+
+    excel_file = pd.ExcelFile(
+        BytesIO(
+            file_bytes
+        )
+    )
+
+    return excel_file.sheet_names
+
+
 def percentage_to_text(
     value
 ):
 
     try:
 
-        if pd.isna(
-            value
-        ):
+        if pd.isna(value):
             return ""
 
         return (
@@ -516,6 +448,9 @@ def chart_to_png(
     chart,
     title
 ):
+
+    if vlc is None:
+        return None
 
     export_chart = (
         chart
@@ -562,9 +497,7 @@ def continue_button(
 
         st.session_state[
             "current_step"
-        ] = (
-            next_step_index
-        )
+        ] = next_step_index
 
         st.session_state[
             "change_step_requested"
@@ -584,7 +517,6 @@ def render_variable_chart(
 ):
 
     if result_df.empty:
-
         return
 
     chart_df = (
@@ -622,9 +554,7 @@ def render_variable_chart(
         .fillna(0)
     )
 
-    if len(
-        chart_df
-    ) == 2:
+    if len(chart_df) == 2:
 
         chart = (
             alt.Chart(
@@ -641,14 +571,7 @@ def render_variable_chart(
 
                 color=alt.Color(
                     "Option:N",
-                    title=None,
-
-                    scale=alt.Scale(
-                        range=[
-                            "#7FA6B8",
-                            "#9CB9A8"
-                        ]
-                    )
+                    title=None
                 ),
 
                 tooltip=[
@@ -656,13 +579,11 @@ def render_variable_chart(
                         "Option:N",
                         title="Option"
                     ),
-
                     alt.Tooltip(
                         "Absolute:Q",
                         title="Absolute",
                         format=",.0f"
                     ),
-
                     alt.Tooltip(
                         "Percentage:Q",
                         title="Percentage",
@@ -676,13 +597,6 @@ def render_variable_chart(
         )
 
     else:
-
-        chart_height = max(
-            200,
-            len(
-                chart_df
-            ) * 36
-        )
 
         chart = (
             alt.Chart(
@@ -703,15 +617,10 @@ def render_variable_chart(
                     "Option:N",
                     title=None,
                     sort="-x",
-
                     axis=alt.Axis(
                         labelLimit=350,
                         labelPadding=8
                     )
-                ),
-
-                color=alt.value(
-                    "#7FA6B8"
                 ),
 
                 tooltip=[
@@ -719,13 +628,11 @@ def render_variable_chart(
                         "Option:N",
                         title="Option"
                     ),
-
                     alt.Tooltip(
                         "Absolute:Q",
                         title="Absolute",
                         format=",.0f"
                     ),
-
                     alt.Tooltip(
                         "Percentage:Q",
                         title="Percentage",
@@ -734,8 +641,10 @@ def render_variable_chart(
                 ]
             )
             .properties(
-                height=
-                    chart_height
+                height=max(
+                    200,
+                    len(chart_df) * 36
+                )
             )
         )
 
@@ -744,14 +653,14 @@ def render_variable_chart(
         use_container_width=True
     )
 
-    try:
-
-        png_data = (
-            chart_to_png(
-                chart,
-                question
-            )
+    png_data = (
+        chart_to_png(
+            chart,
+            question
         )
+    )
+
+    if png_data is not None:
 
         st.download_button(
             "💾 Save Chart",
@@ -766,13 +675,6 @@ def render_variable_chart(
             use_container_width=True
         )
 
-    except Exception:
-
-        st.caption(
-            "Install `vl-convert-python` "
-            "to enable PNG chart download."
-        )
-
 
 # ============================================================
 # CROSSTAB CHART
@@ -780,13 +682,12 @@ def render_variable_chart(
 
 def render_crosstab_chart(
     percentage_df,
-    chart_type="Grouped Bar",
-    title="Crosstab",
-    chart_key="crosstab"
+    chart_type,
+    title,
+    chart_key
 ):
 
     if percentage_df.empty:
-
         return
 
     chart_df = (
@@ -797,9 +698,7 @@ def render_crosstab_chart(
     )
 
     first_column = (
-        chart_df.columns[
-            0
-        ]
+        chart_df.columns[0]
     )
 
     chart_df = (
@@ -823,10 +722,7 @@ def render_crosstab_chart(
         )
     )
 
-    if (
-        chart_type
-        == "Stacked Bar"
-    ):
+    if chart_type == "Stacked Bar":
 
         chart = (
             alt.Chart(
@@ -847,7 +743,6 @@ def render_crosstab_chart(
                 y=alt.Y(
                     "Row Option:N",
                     title=None,
-
                     axis=alt.Axis(
                         labelLimit=400,
                         labelPadding=8
@@ -856,20 +751,7 @@ def render_crosstab_chart(
 
                 color=alt.Color(
                     "Column Option:N",
-                    title=None,
-
-                    scale=alt.Scale(
-                        range=[
-                            "#7FA6B8",
-                            "#9CB9A8",
-                            "#A99DB8",
-                            "#B7AB8B",
-                            "#8FAAB2",
-                            "#A6B198",
-                            "#B69DA2",
-                            "#8D9AAD"
-                        ]
-                    )
+                    title=None
                 ),
 
                 tooltip=[
@@ -877,12 +759,10 @@ def render_crosstab_chart(
                         "Row Option:N",
                         title="Row"
                     ),
-
                     alt.Tooltip(
                         "Column Option:N",
                         title="Column"
                     ),
-
                     alt.Tooltip(
                         "Percentage:Q",
                         title="Percentage",
@@ -893,9 +773,8 @@ def render_crosstab_chart(
             .properties(
                 height=max(
                     250,
-                    percentage_df.shape[
-                        0
-                    ] * 48
+                    percentage_df.shape[0]
+                    * 48
                 )
             )
         )
@@ -920,7 +799,6 @@ def render_crosstab_chart(
                 y=alt.Y(
                     "Row Option:N",
                     title=None,
-
                     axis=alt.Axis(
                         labelLimit=400,
                         labelPadding=8
@@ -932,20 +810,7 @@ def render_crosstab_chart(
 
                 color=alt.Color(
                     "Column Option:N",
-                    title=None,
-
-                    scale=alt.Scale(
-                        range=[
-                            "#7FA6B8",
-                            "#9CB9A8",
-                            "#A99DB8",
-                            "#B7AB8B",
-                            "#8FAAB2",
-                            "#A6B198",
-                            "#B69DA2",
-                            "#8D9AAD"
-                        ]
-                    )
+                    title=None
                 ),
 
                 tooltip=[
@@ -953,12 +818,10 @@ def render_crosstab_chart(
                         "Row Option:N",
                         title="Row"
                     ),
-
                     alt.Tooltip(
                         "Column Option:N",
                         title="Column"
                     ),
-
                     alt.Tooltip(
                         "Percentage:Q",
                         title="Percentage",
@@ -969,9 +832,8 @@ def render_crosstab_chart(
             .properties(
                 height=max(
                     250,
-                    percentage_df.shape[
-                        0
-                    ] * 48
+                    percentage_df.shape[0]
+                    * 48
                 )
             )
         )
@@ -981,14 +843,14 @@ def render_crosstab_chart(
         use_container_width=True
     )
 
-    try:
-
-        png_data = (
-            chart_to_png(
-                chart,
-                title
-            )
+    png_data = (
+        chart_to_png(
+            chart,
+            title
         )
+    )
+
+    if png_data is not None:
 
         st.download_button(
             "💾 Save Crosstab Chart",
@@ -1003,16 +865,442 @@ def render_crosstab_chart(
             use_container_width=True
         )
 
-    except Exception:
 
-        st.caption(
-            "Install `vl-convert-python` "
-            "to enable PNG chart download."
+# ============================================================
+# COMPARISON HELPERS
+# ============================================================
+
+def build_comparison_df(
+    current_result,
+    comparison_result,
+    current_label,
+    comparison_label
+):
+
+    current_df = (
+        current_result[
+            "result"
+        ]
+        .copy()
+    )
+
+    comparison_df = (
+        comparison_result[
+            "result"
+        ]
+        .copy()
+    )
+
+    current_df = (
+        current_df[
+            [
+                "Option",
+                "Absolute",
+                "Percentage"
+            ]
+        ]
+    )
+
+    comparison_df = (
+        comparison_df[
+            [
+                "Option",
+                "Absolute",
+                "Percentage"
+            ]
+        ]
+    )
+
+    current_df[
+        "Option Key"
+    ] = (
+        current_df[
+            "Option"
+        ]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+
+    comparison_df[
+        "Option Key"
+    ] = (
+        comparison_df[
+            "Option"
+        ]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+
+    display_mapping = {}
+
+    for _, row in current_df.iterrows():
+
+        display_mapping[
+            row[
+                "Option Key"
+            ]
+        ] = row[
+            "Option"
+        ]
+
+    for _, row in comparison_df.iterrows():
+
+        if (
+            row[
+                "Option Key"
+            ]
+            not in display_mapping
+        ):
+
+            display_mapping[
+                row[
+                    "Option Key"
+                ]
+            ] = row[
+                "Option"
+            ]
+
+    current_lookup = (
+        current_df
+        .set_index(
+            "Option Key"
+        )
+    )
+
+    comparison_lookup = (
+        comparison_df
+        .set_index(
+            "Option Key"
+        )
+    )
+
+    rows = []
+
+    for option_key, option_name in (
+        display_mapping.items()
+    ):
+
+        current_absolute = 0
+        current_percentage = 0
+
+        comparison_absolute = 0
+        comparison_percentage = 0
+
+        if option_key in current_lookup.index:
+
+            current_row = (
+                current_lookup.loc[
+                    option_key
+                ]
+            )
+
+            current_absolute = (
+                float(
+                    current_row[
+                        "Absolute"
+                    ]
+                )
+            )
+
+            current_percentage = (
+                float(
+                    current_row[
+                        "Percentage"
+                    ]
+                )
+            )
+
+        if (
+            option_key
+            in comparison_lookup.index
+        ):
+
+            comparison_row = (
+                comparison_lookup.loc[
+                    option_key
+                ]
+            )
+
+            comparison_absolute = (
+                float(
+                    comparison_row[
+                        "Absolute"
+                    ]
+                )
+            )
+
+            comparison_percentage = (
+                float(
+                    comparison_row[
+                        "Percentage"
+                    ]
+                )
+            )
+
+        rows.append(
+            {
+                "Option":
+                    option_name,
+
+                f"{current_label} Absolute":
+                    current_absolute,
+
+                f"{comparison_label} Absolute":
+                    comparison_absolute,
+
+                f"{current_label} Percentage":
+                    current_percentage,
+
+                f"{comparison_label} Percentage":
+                    comparison_percentage
+            }
+        )
+
+    return pd.DataFrame(
+        rows
+    )
+
+
+def render_comparison_chart(
+    comparison_df,
+    current_label,
+    comparison_label,
+    metric,
+    chart_type,
+    title,
+    chart_key
+):
+
+    if comparison_df.empty:
+        return
+
+    if metric == "Percentage":
+
+        current_column = (
+            f"{current_label} Percentage"
+        )
+
+        comparison_column = (
+            f"{comparison_label} Percentage"
+        )
+
+        axis_title = (
+            "Percentage (%)"
+        )
+
+    else:
+
+        current_column = (
+            f"{current_label} Absolute"
+        )
+
+        comparison_column = (
+            f"{comparison_label} Absolute"
+        )
+
+        axis_title = (
+            "Absolute"
+        )
+
+    long_df = (
+        comparison_df[
+            [
+                "Option",
+                current_column,
+                comparison_column
+            ]
+        ]
+        .melt(
+            id_vars=[
+                "Option"
+            ],
+            var_name=
+                "Dataset",
+            value_name=
+                "Value"
+        )
+    )
+
+    long_df[
+        "Dataset"
+    ] = (
+        long_df[
+            "Dataset"
+        ]
+        .str.replace(
+            " Percentage",
+            "",
+            regex=False
+        )
+        .str.replace(
+            " Absolute",
+            "",
+            regex=False
+        )
+    )
+
+    if chart_type == "Stacked Bar":
+
+        chart = (
+            alt.Chart(
+                long_df
+            )
+            .mark_bar(
+                cornerRadiusEnd=3
+            )
+            .encode(
+
+                x=alt.X(
+                    "Value:Q",
+                    title=
+                        axis_title,
+                    stack="zero"
+                ),
+
+                y=alt.Y(
+                    "Option:N",
+                    title=None,
+                    sort="-x",
+                    axis=alt.Axis(
+                        labelLimit=400,
+                        labelPadding=8
+                    )
+                ),
+
+                color=alt.Color(
+                    "Dataset:N",
+                    title=None
+                ),
+
+                tooltip=[
+                    alt.Tooltip(
+                        "Option:N",
+                        title="Option"
+                    ),
+                    alt.Tooltip(
+                        "Dataset:N",
+                        title="Dataset"
+                    ),
+                    alt.Tooltip(
+                        "Value:Q",
+                        title=
+                            metric,
+                        format=
+                            ".1f"
+                        if metric
+                        == "Percentage"
+                        else ",.0f"
+                    )
+                ]
+            )
+            .properties(
+                height=max(
+                    260,
+                    len(
+                        comparison_df
+                    ) * 42
+                )
+            )
+        )
+
+    else:
+
+        chart = (
+            alt.Chart(
+                long_df
+            )
+            .mark_bar(
+                cornerRadiusEnd=3
+            )
+            .encode(
+
+                x=alt.X(
+                    "Value:Q",
+                    title=
+                        axis_title
+                ),
+
+                y=alt.Y(
+                    "Option:N",
+                    title=None,
+                    sort="-x",
+                    axis=alt.Axis(
+                        labelLimit=400,
+                        labelPadding=8
+                    )
+                ),
+
+                yOffset=
+                    "Dataset:N",
+
+                color=alt.Color(
+                    "Dataset:N",
+                    title=None
+                ),
+
+                tooltip=[
+                    alt.Tooltip(
+                        "Option:N",
+                        title="Option"
+                    ),
+                    alt.Tooltip(
+                        "Dataset:N",
+                        title="Dataset"
+                    ),
+                    alt.Tooltip(
+                        "Value:Q",
+                        title=
+                            metric,
+                        format=
+                            ".1f"
+                        if metric
+                        == "Percentage"
+                        else ",.0f"
+                    )
+                ]
+            )
+            .properties(
+                height=max(
+                    260,
+                    len(
+                        comparison_df
+                    ) * 42
+                )
+            )
+        )
+
+    st.altair_chart(
+        chart,
+        use_container_width=True
+    )
+
+    png_data = (
+        chart_to_png(
+            chart,
+            title
+        )
+    )
+
+    if png_data is not None:
+
+        st.download_button(
+            "💾 Save Comparison Chart",
+            data=
+                png_data,
+            file_name=
+                f"{chart_key}.png",
+            mime=
+                "image/png",
+            key=
+                f"download_{chart_key}",
+            use_container_width=True
         )
 
 
 # ============================================================
-# PREPARE DATAFRAME FOR EXCEL
+# PREPARE EXCEL
 # ============================================================
 
 def prepare_excel_df(
@@ -1049,22 +1337,19 @@ def prepare_excel_df(
                 except Exception:
                     pass
 
-                part_text = (
+                text = (
                     str(part)
                     .strip()
                 )
 
-                if not part_text:
+                if not text:
+                    continue
+
+                if text.lower() == "nan":
                     continue
 
                 if (
-                    part_text.lower()
-                    == "nan"
-                ):
-                    continue
-
-                if (
-                    part_text.lower()
+                    text.lower()
                     .startswith(
                         "unnamed:"
                     )
@@ -1072,7 +1357,7 @@ def prepare_excel_df(
                     continue
 
                 parts.append(
-                    part_text
+                    text
                 )
 
             if parts:
@@ -1099,9 +1384,7 @@ def prepare_excel_df(
 
             if column not in seen:
 
-                seen[
-                    column
-                ] = 0
+                seen[column] = 0
 
                 unique_columns.append(
                     column
@@ -1109,9 +1392,7 @@ def prepare_excel_df(
 
             else:
 
-                seen[
-                    column
-                ] += 1
+                seen[column] += 1
 
                 unique_columns.append(
                     f"{column}_{seen[column]}"
@@ -1147,7 +1428,7 @@ st.html(
         <div class="hero-subtitle">
             Clean your survey data, detect duplicates,
             configure routing, explore crosstabs,
-            and generate analysis-ready reports.
+            compare datasets, and generate reports.
         </div>
 
     </div>
@@ -1163,10 +1444,6 @@ with st.sidebar:
 
     st.markdown(
         "## ⚙️ Data Setup"
-    )
-
-    st.caption(
-        "Upload your survey dataset to begin."
     )
 
     platform = (
@@ -1188,6 +1465,37 @@ with st.sidebar:
             ]
         )
     )
+
+    selected_sheet = None
+
+    if uploaded_file is not None:
+
+        try:
+
+            uploaded_bytes = (
+                uploaded_file
+                .getvalue()
+            )
+
+            sheet_names = (
+                get_sheet_names(
+                    uploaded_bytes
+                )
+            )
+
+            selected_sheet = (
+                st.selectbox(
+                    "Select Sheet",
+                    sheet_names
+                )
+            )
+
+        except Exception as error:
+
+            st.error(
+                f"Failed to read sheets: "
+                f"{error}"
+            )
 
     load_button = (
         st.button(
@@ -1215,6 +1523,11 @@ with st.sidebar:
         )
 
         st.caption(
+            f"Sheet: "
+            f"{st.session_state['selected_sheet']}"
+        )
+
+        st.caption(
             f"Respondents: "
             f"{len(st.session_state['analysis_df']):,}"
         )
@@ -1232,9 +1545,20 @@ if load_button:
             "Please upload an Excel file first."
         )
 
+    elif selected_sheet is None:
+
+        st.warning(
+            "Please select a sheet."
+        )
+
     else:
 
         try:
+
+            source_bytes = (
+                uploaded_file
+                .getvalue()
+            )
 
             (
                 raw_df,
@@ -1243,8 +1567,11 @@ if load_button:
                 respondent_count
 
             ) = load_survey_data(
-                uploaded_file,
-                platform
+                BytesIO(
+                    source_bytes
+                ),
+                platform,
+                selected_sheet
             )
 
             st.session_state[
@@ -1266,6 +1593,18 @@ if load_button:
             st.session_state[
                 "platform"
             ] = platform
+
+            st.session_state[
+                "selected_sheet"
+            ] = selected_sheet
+
+            st.session_state[
+                "source_file_bytes"
+            ] = source_bytes
+
+            st.session_state[
+                "source_file_name"
+            ] = uploaded_file.name
 
             st.session_state[
                 "data_loaded"
@@ -1318,6 +1657,10 @@ if load_button:
             ] = {}
 
             st.session_state[
+                "comparison_result"
+            ] = None
+
+            st.session_state[
                 "current_step"
             ] = 0
 
@@ -1344,8 +1687,8 @@ if not st.session_state[
 ]:
 
     st.info(
-        "Upload a survey Excel file "
-        "and click 'Load Data' to start."
+        "Upload an Excel file, "
+        "select a sheet, then click Load Data."
     )
 
     st.stop()
@@ -1375,7 +1718,7 @@ metadata = (
 
 
 # ============================================================
-# NAVIGATION STATE SYNCHRONIZATION
+# NAVIGATION
 # ============================================================
 
 if st.session_state.get(
@@ -1395,10 +1738,6 @@ if st.session_state.get(
         "change_step_requested"
     ] = False
 
-
-# ============================================================
-# NAVIGATION
-# ============================================================
 
 selected_step = (
     st.radio(
@@ -1460,8 +1799,8 @@ if selected_step == "🏠 Overview":
         == "Open"
     )
 
-    col1, col2, col3, col4 = (
-        st.columns(4)
+    col1, col2, col3, col4, col5 = (
+        st.columns(5)
     )
 
     metrics = [
@@ -1474,24 +1813,29 @@ if selected_step == "🏠 Overview":
         ),
         (
             col2,
+            "Sheet",
+            st.session_state[
+                "selected_sheet"
+            ]
+        ),
+        (
+            col3,
             "Respondents",
             f"{len(analysis_df):,}"
         ),
         (
-            col3,
+            col4,
             "Questions",
             f"{total_questions}"
         ),
         (
-            col4,
+            col5,
             "Open Questions",
             f"{open_questions}"
         )
     ]
 
-    for column, label, value in (
-        metrics
-    ):
+    for column, label, value in metrics:
 
         with column:
 
@@ -1578,14 +1922,10 @@ if selected_step == "🏠 Overview":
             }
         )
 
-    overview_df = (
+    st.dataframe(
         pd.DataFrame(
             overview_rows
-        )
-    )
-
-    st.dataframe(
-        overview_df,
+        ),
         use_container_width=True,
         hide_index=True
     )
@@ -1594,11 +1934,6 @@ if selected_step == "🏠 Overview":
 
     st.subheader(
         "Raw Data Preview"
-    )
-
-    st.caption(
-        "This preview preserves the original "
-        "uploaded data structure."
     )
 
     st.dataframe(
@@ -1620,24 +1955,6 @@ elif selected_step == "🔍 Duplicate":
 
     st.header(
         "🔍 Duplicate Detection"
-    )
-
-    st.html(
-        """
-        <div class="info-box">
-
-            <b>
-                Duplicate detection uses
-                the phone/contact variable.
-            </b>
-
-            <br>
-
-            Phone numbers are normalized
-            before comparison.
-
-        </div>
-        """
     )
 
     contact_questions = [
@@ -1667,7 +1984,8 @@ elif selected_step == "🔍 Duplicate":
                     "Select a question"
                 ]
                 + contact_questions,
-                key="duplicate_contact_question"
+                key=
+                    "duplicate_contact_question"
             )
         )
 
@@ -1683,7 +2001,7 @@ elif selected_step == "🔍 Duplicate":
             ):
 
                 st.warning(
-                    "Please select a contact variable first."
+                    "Please select a contact variable."
                 )
 
             else:
@@ -1725,7 +2043,6 @@ elif selected_step == "🔍 Duplicate":
         ):
 
             st.success(
-                "Duplicate data has been removed successfully. "
                 "No duplicate contacts remain."
             )
 
@@ -1737,45 +2054,13 @@ elif selected_step == "🔍 Duplicate":
 
         if (
             duplicate_df is not None
-            and not duplicate_df.empty
+            and
+            not duplicate_df.empty
         ):
-
-            st.divider()
 
             st.subheader(
                 "Duplicate Responses"
             )
-
-            group_count = (
-                duplicate_df[
-                    "Duplicate Group"
-                ]
-                .nunique()
-            )
-
-            row_count = (
-                len(
-                    duplicate_df
-                )
-            )
-
-            col1, col2 = (
-                st.columns(2)
-            )
-
-            with col1:
-
-                st.metric(
-                    "Duplicate Rows",
-                    row_count
-                )
-
-            with col2:
-
-                st.metric(
-                    "Duplicate Groups",
-                    group_count
-                )
 
             display_df = (
                 duplicate_df[
@@ -1812,14 +2097,7 @@ elif selected_step == "🔍 Duplicate":
             st.dataframe(
                 display_df,
                 use_container_width=True,
-                hide_index=True,
-                height=400
-            )
-
-            st.divider()
-
-            st.subheader(
-                "Select Rows to Delete"
+                hide_index=True
             )
 
             available_indices = (
@@ -1842,17 +2120,17 @@ elif selected_step == "🔍 Duplicate":
 
             selected_rows = (
                 st.multiselect(
-                    "Rows",
+                    "Rows to Delete",
                     options=
                         available_indices,
-
                     format_func=
                         lambda index:
-                            (
-                                f"Row {index + 1} — "
-                                f"{contact_mapping.get(index, '')}"
-                            ),
-                    key="duplicate_rows_to_delete"
+                        (
+                            f"Row {index + 1} — "
+                            f"{contact_mapping.get(index, '')}"
+                        ),
+                    key=
+                        "duplicate_rows_to_delete"
                 )
             )
 
@@ -1865,7 +2143,7 @@ elif selected_step == "🔍 Duplicate":
                 if not selected_rows:
 
                     st.warning(
-                        "Please select at least one row to delete."
+                        "Select at least one row."
                     )
 
                 else:
@@ -1893,7 +2171,7 @@ elif selected_step == "🔍 Duplicate":
                         )
                     )
 
-                    remaining_duplicates = (
+                    remaining = (
                         detect_contact_duplicates(
                             st.session_state[
                                 "analysis_df"
@@ -1904,19 +2182,21 @@ elif selected_step == "🔍 Duplicate":
 
                     st.session_state[
                         "duplicate_df"
-                    ] = (
-                        remaining_duplicates
-                    )
+                    ] = remaining
 
                     st.session_state[
                         "duplicate_cleared"
                     ] = (
-                        remaining_duplicates.empty
+                        remaining.empty
                     )
 
                     st.session_state[
                         "crosstab_results"
                     ] = []
+
+                    st.session_state[
+                        "comparison_result"
+                    ] = None
 
                     st.rerun()
 
@@ -1933,11 +2213,6 @@ elif selected_step == "🎯 Filtering":
 
     st.header(
         "🎯 Database Filtering"
-    )
-
-    st.caption(
-        "Choose which respondents should be included "
-        "in the analysis. You can apply up to 5 filters."
     )
 
     filter_questions = [
@@ -1970,7 +2245,6 @@ elif selected_step == "🎯 Filtering":
                     "No Filter"
                 ]
                 + filter_questions,
-
                 key=
                     f"filter_question_{index}"
             )
@@ -2021,16 +2295,18 @@ elif selected_step == "🎯 Filtering":
 
         st.session_state[
             "global_filters"
-        ] = (
-            filter_config
-        )
+        ] = filter_config
 
         st.session_state[
             "crosstab_results"
         ] = []
 
+        st.session_state[
+            "comparison_result"
+        ] = None
+
         st.success(
-            "Database filtering applied successfully."
+            "Filtering applied."
         )
 
     filtered_preview = (
@@ -2069,48 +2345,6 @@ elif selected_step == "🎯 Filtering":
             )
         )
 
-    if (
-        st.session_state[
-            "global_filters"
-        ]
-    ):
-
-        st.subheader(
-            "Applied Filters"
-        )
-
-        filter_summary = []
-
-        for config in (
-            st.session_state[
-                "global_filters"
-            ]
-        ):
-
-            filter_summary.append(
-                {
-                    "Variable":
-                        config[
-                            "question"
-                        ],
-
-                    "Included Values":
-                        ", ".join(
-                            config[
-                                "values"
-                            ]
-                        )
-                }
-            )
-
-        st.dataframe(
-            pd.DataFrame(
-                filter_summary
-            ),
-            use_container_width=True,
-            hide_index=True
-        )
-
     continue_button(
         3
     )
@@ -2126,41 +2360,15 @@ elif selected_step == "🔀 Routing":
         "🔀 Routing Variable"
     )
 
-    st.caption(
-        "Configure which respondents should be included "
-        "for each active variable."
-    )
-
-    routing_source_df = (
-        apply_global_filters(
-            st.session_state[
-                "analysis_df"
-            ],
-            metadata,
-            st.session_state[
-                "global_filters"
-            ]
-        )
-    )
-
-    st.caption(
-        f"Database after filtering: "
-        f"{len(routing_source_df):,} respondent(s)."
-    )
-
     if (
         st.session_state[
             "removed_questions"
         ]
     ):
 
-        st.subheader(
-            "Restore Variables"
-        )
-
         restore_question = (
             st.selectbox(
-                "Select a variable",
+                "Restore Variable",
                 [
                     "Select a variable"
                 ]
@@ -2168,13 +2376,13 @@ elif selected_step == "🔀 Routing":
                 st.session_state[
                     "removed_questions"
                 ],
-                key="restore_variable"
+                key=
+                    "restore_variable"
             )
         )
 
         if st.button(
-            "↩️ Restore Variable",
-            use_container_width=True
+            "↩️ Restore Variable"
         ):
 
             if (
@@ -2219,15 +2427,12 @@ elif selected_step == "🔀 Routing":
         if item[
             "type"
         ] == "Contact":
-
             continue
 
         st.html(
             f"""
             <div class="section-card">
-
                 <b>{question}</b>
-
             </div>
             """
         )
@@ -2275,20 +2480,18 @@ elif selected_step == "🔀 Routing":
         base_options = [
             "All Respondents"
         ] + [
-            x[
+            item2[
                 "question"
             ]
-
-            for x
+            for item2
             in metadata
-
             if (
-                x[
+                item2[
                     "question"
                 ]
                 != question
-
-                and x[
+                and
+                item2[
                     "type"
                 ]
                 in [
@@ -2333,9 +2536,6 @@ elif selected_step == "🔀 Routing":
                 )
             )
 
-            if base_item is None:
-                continue
-
             selected_values = (
                 st.multiselect(
                     "Routing Values",
@@ -2363,9 +2563,7 @@ elif selected_step == "🔀 Routing":
 
     st.session_state[
         "routing_config"
-    ] = (
-        routing_config
-    )
+    ] = routing_config
 
     if st.button(
         "✅ Apply Routing",
@@ -2390,7 +2588,6 @@ elif selected_step == "🔀 Routing":
                         )
                     )
             }
-
             for key, value
             in routing_config.items()
         }
@@ -2399,8 +2596,12 @@ elif selected_step == "🔀 Routing":
             "crosstab_results"
         ] = []
 
+        st.session_state[
+            "comparison_result"
+        ] = None
+
         st.success(
-            "Routing configuration applied successfully."
+            "Routing applied."
         )
 
     continue_button(
@@ -2419,11 +2620,32 @@ elif selected_step == "📊 Crosstab":
     )
 
     st.caption(
-        "Create up to 10 crosstab configurations. "
-        "Supported combinations: SA × SA and SA × MA."
+        "Supported combinations: "
+        "SA × SA and SA × MA."
     )
 
-    crosstab_variables = [
+    row_variables = [
+        item[
+            "question"
+        ]
+        for item
+        in metadata
+        if (
+            item[
+                "type"
+            ]
+            == "SA"
+            and
+            item[
+                "question"
+            ]
+            in st.session_state[
+                "active_questions"
+            ]
+        )
+    ]
+
+    column_variables = [
         item[
             "question"
         ]
@@ -2447,27 +2669,6 @@ elif selected_step == "📊 Crosstab":
         )
     ]
 
-    row_variables = [
-        item[
-            "question"
-        ]
-        for item
-        in metadata
-        if (
-            item[
-                "type"
-            ]
-            == "SA"
-            and
-            item[
-                "question"
-            ]
-            in st.session_state[
-                "active_questions"
-            ]
-        )
-    ]
-
     crosstab_configs = []
 
     for index in range(10):
@@ -2479,7 +2680,7 @@ elif selected_step == "📊 Crosstab":
             )
         ):
 
-            crosstab_name = (
+            name = (
                 st.text_input(
                     "Crosstab Name",
                     value=
@@ -2515,43 +2716,23 @@ elif selected_step == "📊 Crosstab":
                         [
                             "Select Variable"
                         ]
-                        + crosstab_variables,
+                        + column_variables,
                         key=
                             f"ct_column_{index}"
                     )
                 )
 
-            col3, col4 = (
-                st.columns(2)
+            chart_type = (
+                st.selectbox(
+                    "Chart Type",
+                    [
+                        "Grouped Bar",
+                        "Stacked Bar"
+                    ],
+                    key=
+                        f"ct_chart_type_{index}"
+                )
             )
-
-            with col3:
-
-                metric = (
-                    st.selectbox(
-                        "Metric",
-                        [
-                            "Absolute",
-                            "Percentage"
-                        ],
-                        key=
-                            f"ct_metric_{index}"
-                    )
-                )
-
-            with col4:
-
-                chart_type = (
-                    st.selectbox(
-                        "Chart Type",
-                        [
-                            "Grouped Bar",
-                            "Stacked Bar"
-                        ],
-                        key=
-                            f"ct_chart_type_{index}"
-                    )
-                )
 
             if (
                 row_question
@@ -2565,7 +2746,7 @@ elif selected_step == "📊 Crosstab":
                     {
                         "name":
                             (
-                                crosstab_name.strip()
+                                name.strip()
                                 or
                                 f"Crosstab {index + 1}"
                             ),
@@ -2575,9 +2756,6 @@ elif selected_step == "📊 Crosstab":
 
                         "column_question":
                             column_question,
-
-                        "metric":
-                            metric,
 
                         "chart_type":
                             chart_type
@@ -2665,13 +2843,10 @@ elif selected_step == "📊 Crosstab":
 
         st.session_state[
             "crosstab_results"
-        ] = (
-            results
-        )
+        ] = results
 
         st.success(
-            f"{len(results)} crosstab(s) "
-            f"applied successfully."
+            f"{len(results)} crosstab(s) applied."
         )
 
     continue_button(
@@ -2745,100 +2920,15 @@ elif selected_step == "📈 Analyze Result":
 
         all_results[
             question
-        ] = (
-            result
-        )
+        ] = result
 
     st.session_state[
         "variable_analysis_result"
-    ] = (
-        all_results
-    )
+    ] = all_results
 
-    st.subheader(
-        "Analysis Summary"
-    )
-
-    total_cleaned = (
-        len(
-            analysis_base_df
-        )
-    )
-
-    total_variables = (
-        len(
-            all_results
-        )
-    )
-
-    total_open = sum(
-        1
-        for result
-        in all_results.values()
-        if result[
-            "type"
-        ]
-        == "Open"
-    )
-
-    total_crosstabs = (
-        len(
-            st.session_state[
-                "crosstab_results"
-            ]
-        )
-    )
-
-    col1, col2, col3, col4 = (
-        st.columns(4)
-    )
-
-    scorecards = [
-        (
-            col1,
-            "Final Respondents",
-            f"{total_cleaned:,}"
-        ),
-        (
-            col2,
-            "Active Variables",
-            f"{total_variables:,}"
-        ),
-        (
-            col3,
-            "Crosstabs",
-            f"{total_crosstabs:,}"
-        ),
-        (
-            col4,
-            "Open Questions",
-            f"{total_open:,}"
-        )
-    ]
-
-    for column, label, value in (
-        scorecards
-    ):
-
-        with column:
-
-            st.html(
-                f"""
-                <div class="metric-card">
-
-                    <div class="metric-label">
-                        {label}
-                    </div>
-
-                    <div class="metric-value">
-                        {value}
-                    </div>
-
-                </div>
-                """
-            )
-
-    st.write("")
+    # ========================================================
+    # VARIABLE ANALYSIS
+    # ========================================================
 
     st.subheader(
         "Variable Analysis"
@@ -2850,48 +2940,15 @@ elif selected_step == "📈 Analyze Result":
         all_results.items()
     ):
 
-        item = (
-            get_question_metadata(
-                metadata,
-                question
-            )
-        )
-
-        if item is None:
-            continue
-
-        question_type = (
-            str(
-                item.get(
-                    "type",
-                    ""
-                )
-            )
-            .strip()
-            .lower()
-        )
-
-        result_type = (
-            str(
-                result.get(
-                    "type",
-                    ""
-                )
-            )
-            .strip()
-            .lower()
-        )
-
-        if question_type not in [
-            "sa",
-            "ma"
-        ]:
-            continue
-
-        if result_type not in [
-            "sa",
-            "ma"
-        ]:
+        if (
+            result[
+                "type"
+            ]
+            not in [
+                "SA",
+                "MA"
+            ]
+        ):
             continue
 
         result_df = (
@@ -2904,26 +2961,13 @@ elif selected_step == "📈 Analyze Result":
         if result_df.empty:
             continue
 
-        required_columns = {
-            "Option",
-            "Absolute",
-            "Percentage"
-        }
-
-        if not required_columns.issubset(
-            result_df.columns
-        ):
-            continue
-
         chart_questions.append(
             question
         )
 
     for start in range(
         0,
-        len(
-            chart_questions
-        ),
+        len(chart_questions),
         2
     ):
 
@@ -2934,7 +2978,7 @@ elif selected_step == "📈 Analyze Result":
             ]
         )
 
-        chart_columns = (
+        columns = (
             st.columns(
                 len(
                     row_questions
@@ -2943,19 +2987,13 @@ elif selected_step == "📈 Analyze Result":
         )
 
         for column, question in zip(
-            chart_columns,
+            columns,
             row_questions
         ):
 
             result = (
                 all_results[
                     question
-                ]
-            )
-
-            result_df = (
-                result[
-                    "result"
                 ]
             )
 
@@ -2987,7 +3025,9 @@ elif selected_step == "📈 Analyze Result":
                 )
 
                 render_variable_chart(
-                    result_df,
+                    result[
+                        "result"
+                    ],
                     question,
                     make_widget_key(
                         "variable_chart",
@@ -3027,9 +3067,12 @@ elif selected_step == "📈 Analyze Result":
                             st.dataframe(
                                 other_df,
                                 use_container_width=True,
-                                hide_index=True,
-                                height=300
+                                hide_index=True
                             )
+
+    # ========================================================
+    # CROSSTAB ANALYSIS
+    # ========================================================
 
     st.divider()
 
@@ -3037,13 +3080,9 @@ elif selected_step == "📈 Analyze Result":
         "Crosstab Analysis"
     )
 
-    crosstab_results = (
-        st.session_state[
-            "crosstab_results"
-        ]
-    )
-
-    if not crosstab_results:
+    if not st.session_state[
+        "crosstab_results"
+    ]:
 
         st.info(
             "No crosstab results available."
@@ -3052,7 +3091,9 @@ elif selected_step == "📈 Analyze Result":
     else:
 
         for index, item in enumerate(
-            crosstab_results
+            st.session_state[
+                "crosstab_results"
+            ]
         ):
 
             result = (
@@ -3062,10 +3103,9 @@ elif selected_step == "📈 Analyze Result":
             )
 
             title = (
-                item.get(
-                    "name",
-                    f"Crosstab {index + 1}"
-                )
+                item[
+                    "name"
+                ]
             )
 
             st.html(
@@ -3088,92 +3128,17 @@ elif selected_step == "📈 Analyze Result":
                 """
             )
 
-            if (
+            render_crosstab_chart(
+                result[
+                    "percentage"
+                ],
                 item.get(
-                    "metric"
-                )
-                == "Absolute"
-            ):
-
-                chart_source = (
-                    result[
-                        "absolute"
-                    ]
-                    .astype(float)
-                )
-
-            else:
-
-                chart_source = (
-                    result[
-                        "percentage"
-                    ]
-                    .copy()
-                    .round(1)
-                )
-
-            if not chart_source.empty:
-
-                if (
-                    item.get(
-                        "metric"
-                    )
-                    == "Percentage"
-                ):
-
-                    render_crosstab_chart(
-                        chart_source,
-                        chart_type=
-                            item.get(
-                                "chart_type",
-                                "Grouped Bar"
-                            ),
-                        title=
-                            title,
-                        chart_key=
-                            f"crosstab_{index + 1}"
-                    )
-
-                else:
-
-                    absolute_chart_df = (
-                        chart_source
-                        .copy()
-                    )
-
-                    total = (
-                        absolute_chart_df
-                        .to_numpy()
-                        .sum()
-                    )
-
-                    if total > 0:
-
-                        chart_percentage_df = (
-                            absolute_chart_df
-                            / total
-                            * 100
-                        )
-
-                    else:
-
-                        chart_percentage_df = (
-                            absolute_chart_df
-                            .copy()
-                        )
-
-                    render_crosstab_chart(
-                        chart_percentage_df,
-                        chart_type=
-                            item.get(
-                                "chart_type",
-                                "Grouped Bar"
-                            ),
-                        title=
-                            title,
-                        chart_key=
-                            f"crosstab_{index + 1}"
-                    )
+                    "chart_type",
+                    "Grouped Bar"
+                ),
+                title,
+                f"crosstab_{index + 1}"
+            )
 
             with st.expander(
                 "View Absolute Results"
@@ -3183,8 +3148,7 @@ elif selected_step == "📈 Analyze Result":
                     result[
                         "absolute"
                     ],
-                    use_container_width=True,
-                    hide_index=False
+                    use_container_width=True
                 )
 
             with st.expander(
@@ -3196,40 +3160,378 @@ elif selected_step == "📈 Analyze Result":
                         "percentage"
                     ]
                     .round(1),
-                    use_container_width=True,
-                    hide_index=False
+                    use_container_width=True
                 )
 
-            column_item = (
+    # ========================================================
+    # COMPARISON ANALYSIS
+    # ========================================================
+
+    st.divider()
+
+    st.subheader(
+        "📊 Comparison Analysis"
+    )
+
+    st.caption(
+        "Compare the currently loaded sheet "
+        "with another sheet or another survey file."
+    )
+
+    current_label = (
+        st.text_input(
+            "Current Dataset Label",
+            value=
+                st.session_state[
+                    "selected_sheet"
+                ],
+            key=
+                "comparison_current_label"
+        )
+    )
+
+    comparison_source = (
+        st.radio(
+            "Comparison Source",
+            [
+                "Another Sheet from Current File",
+                "Upload Another File"
+            ],
+            key=
+                "comparison_source"
+        )
+    )
+
+    comparison_df = None
+    comparison_metadata = None
+    comparison_sheet = None
+    comparison_label_default = (
+        "Comparison"
+    )
+
+    if (
+        comparison_source
+        == "Another Sheet from Current File"
+    ):
+
+        all_sheets = (
+            get_sheet_names(
+                st.session_state[
+                    "source_file_bytes"
+                ]
+            )
+        )
+
+        comparison_sheets = [
+            sheet
+            for sheet
+            in all_sheets
+            if sheet
+            != st.session_state[
+                "selected_sheet"
+            ]
+        ]
+
+        if not comparison_sheets:
+
+            st.info(
+                "No other sheet is available "
+                "in the current file."
+            )
+
+        else:
+
+            comparison_sheet = (
+                st.selectbox(
+                    "Comparison Sheet",
+                    comparison_sheets,
+                    key=
+                        "comparison_sheet"
+                )
+            )
+
+            comparison_label_default = (
+                comparison_sheet
+            )
+
+            try:
+
+                (
+                    comparison_raw_df,
+                    comparison_df,
+                    comparison_metadata,
+                    comparison_n
+
+                ) = load_survey_data(
+                    BytesIO(
+                        st.session_state[
+                            "source_file_bytes"
+                        ]
+                    ),
+                    st.session_state[
+                        "platform"
+                    ],
+                    comparison_sheet
+                )
+
+            except Exception as error:
+
+                st.error(
+                    f"Failed to load comparison sheet: "
+                    f"{error}"
+                )
+
+    else:
+
+        comparison_platform = (
+            st.selectbox(
+                "Comparison Survey Platform",
+                [
+                    "SurveyMonkey",
+                    "Google Forms"
+                ],
+                index=(
+                    0
+                    if st.session_state[
+                        "platform"
+                    ]
+                    == "SurveyMonkey"
+                    else 1
+                ),
+                key=
+                    "comparison_platform"
+            )
+        )
+
+        comparison_file = (
+            st.file_uploader(
+                "Upload Comparison File",
+                type=[
+                    "xlsx",
+                    "xls"
+                ],
+                key=
+                    "comparison_file"
+            )
+        )
+
+        if comparison_file is not None:
+
+            try:
+
+                comparison_bytes = (
+                    comparison_file
+                    .getvalue()
+                )
+
+                comparison_sheets = (
+                    get_sheet_names(
+                        comparison_bytes
+                    )
+                )
+
+                comparison_sheet = (
+                    st.selectbox(
+                        "Comparison Sheet",
+                        comparison_sheets,
+                        key=
+                            "comparison_uploaded_sheet"
+                    )
+                )
+
+                comparison_label_default = (
+                    comparison_sheet
+                )
+
+                (
+                    comparison_raw_df,
+                    comparison_df,
+                    comparison_metadata,
+                    comparison_n
+
+                ) = load_survey_data(
+                    BytesIO(
+                        comparison_bytes
+                    ),
+                    comparison_platform,
+                    comparison_sheet
+                )
+
+            except Exception as error:
+
+                st.error(
+                    f"Failed to load comparison file: "
+                    f"{error}"
+                )
+
+    comparison_label = (
+        st.text_input(
+            "Comparison Dataset Label",
+            value=
+                comparison_label_default,
+            key=
+                "comparison_label"
+        )
+    )
+
+    current_variables = [
+        item[
+            "question"
+        ]
+        for item
+        in metadata
+        if (
+            item[
+                "type"
+            ]
+            in [
+                "SA",
+                "MA"
+            ]
+            and
+            item[
+                "question"
+            ]
+            in st.session_state[
+                "active_questions"
+            ]
+        )
+    ]
+
+    if (
+        comparison_df is not None
+        and
+        comparison_metadata is not None
+    ):
+
+        comparison_variables = [
+            item[
+                "question"
+            ]
+            for item
+            in comparison_metadata
+            if item[
+                "type"
+            ]
+            in [
+                "SA",
+                "MA"
+            ]
+        ]
+
+        col1, col2 = (
+            st.columns(2)
+        )
+
+        with col1:
+
+            current_question = (
+                st.selectbox(
+                    "Current Variable",
+                    current_variables,
+                    key=
+                        "comparison_current_question"
+                )
+            )
+
+        with col2:
+
+            default_index = 0
+
+            if (
+                current_question
+                in comparison_variables
+            ):
+
+                default_index = (
+                    comparison_variables.index(
+                        current_question
+                    )
+                )
+
+            comparison_question = (
+                st.selectbox(
+                    "Comparison Variable",
+                    comparison_variables,
+                    index=
+                        default_index,
+                    key=
+                        "comparison_question"
+                )
+            )
+
+        col3, col4 = (
+            st.columns(2)
+        )
+
+        with col3:
+
+            comparison_metric = (
+                st.selectbox(
+                    "Metric",
+                    [
+                        "Percentage",
+                        "Absolute"
+                    ],
+                    key=
+                        "comparison_metric"
+                )
+            )
+
+        with col4:
+
+            comparison_chart_type = (
+                st.selectbox(
+                    "Chart Type",
+                    [
+                        "Grouped Bar",
+                        "Stacked Bar"
+                    ],
+                    key=
+                        "comparison_chart_type"
+                )
+            )
+
+        if st.button(
+            "🚀 Generate Comparison",
+            type="primary",
+            use_container_width=True
+        ):
+
+            current_item = (
                 get_question_metadata(
                     metadata,
-                    item[
-                        "column_question"
-                    ]
+                    current_question
+                )
+            )
+
+            comparison_item = (
+                get_question_metadata(
+                    comparison_metadata,
+                    comparison_question
                 )
             )
 
             if (
-                column_item
-                and
-                column_item.get(
+                current_item[
                     "type"
-                )
-                == "MA"
-                and
-                "Lainnya"
-                in column_item.get(
-                    "options",
-                    []
-                )
+                ]
+                != comparison_item[
+                    "type"
+                ]
             ):
 
-                crosstab_base_df = (
+                st.error(
+                    "Comparison variable types must match. "
+                    "Use SA vs SA or MA vs MA."
+                )
+
+            else:
+
+                current_filtered_df = (
                     get_filtered_df(
                         analysis_base_df,
-                        item[
-                            "row_question"
-                        ],
+                        current_question,
                         metadata,
                         st.session_state[
                             "applied_routing_config"
@@ -3237,36 +3539,239 @@ elif selected_step == "📈 Analyze Result":
                     )
                 )
 
-                other_df = (
-                    collect_ma_other_details(
-                        crosstab_base_df,
-                        column_item
+                current_result = (
+                    calculate_variable_analysis(
+                        current_filtered_df,
+                        current_item
                     )
                 )
 
-                if not other_df.empty:
+                comparison_variable_result = (
+                    calculate_variable_analysis(
+                        comparison_df,
+                        comparison_item
+                    )
+                )
 
-                    with st.expander(
-                        f"🔎 Lihat isi Lainnya "
-                        f"({len(other_df):,})"
-                    ):
+                comparison_table = (
+                    build_comparison_df(
+                        current_result,
+                        comparison_variable_result,
+                        current_label,
+                        comparison_label
+                    )
+                )
 
-                        st.dataframe(
-                            other_df,
-                            use_container_width=True,
-                            hide_index=True,
-                            height=300
-                        )
+                current_other_df = (
+                    collect_ma_other_details(
+                        current_filtered_df,
+                        current_item
+                    )
+                    if current_item[
+                        "type"
+                    ]
+                    == "MA"
+                    else pd.DataFrame()
+                )
+
+                comparison_other_df = (
+                    collect_ma_other_details(
+                        comparison_df,
+                        comparison_item
+                    )
+                    if comparison_item[
+                        "type"
+                    ]
+                    == "MA"
+                    else pd.DataFrame()
+                )
+
+                st.session_state[
+                    "comparison_result"
+                ] = {
+                    "table":
+                        comparison_table,
+
+                    "current_label":
+                        current_label,
+
+                    "comparison_label":
+                        comparison_label,
+
+                    "current_question":
+                        current_question,
+
+                    "comparison_question":
+                        comparison_question,
+
+                    "metric":
+                        comparison_metric,
+
+                    "chart_type":
+                        comparison_chart_type,
+
+                    "current_base_n":
+                        current_result[
+                            "base_n"
+                        ],
+
+                    "comparison_base_n":
+                        comparison_variable_result[
+                            "base_n"
+                        ],
+
+                    "current_other_df":
+                        current_other_df,
+
+                    "comparison_other_df":
+                        comparison_other_df
+                }
+
+    saved_comparison = (
+        st.session_state[
+            "comparison_result"
+        ]
+    )
+
+    if saved_comparison:
+
+        st.divider()
+
+        comparison_title = (
+            f"{saved_comparison['current_question']} — "
+            f"{saved_comparison['current_label']} "
+            f"vs "
+            f"{saved_comparison['comparison_label']}"
+        )
+
+        st.html(
+            f"""
+            <div class="analysis-card">
+
+                <div class="analysis-question">
+                    {comparison_title}
+                </div>
+
+                <div class="analysis-small">
+                    {saved_comparison["current_label"]}
+                    Base N:
+                    {saved_comparison["current_base_n"]}
+                    &nbsp; • &nbsp;
+                    {saved_comparison["comparison_label"]}
+                    Base N:
+                    {saved_comparison["comparison_base_n"]}
+                </div>
+
+            </div>
+            """
+        )
+
+        render_comparison_chart(
+            saved_comparison[
+                "table"
+            ],
+            saved_comparison[
+                "current_label"
+            ],
+            saved_comparison[
+                "comparison_label"
+            ],
+            saved_comparison[
+                "metric"
+            ],
+            saved_comparison[
+                "chart_type"
+            ],
+            comparison_title,
+            "comparison_chart"
+        )
+
+        with st.expander(
+            "View Comparison Table"
+        ):
+
+            display_comparison = (
+                saved_comparison[
+                    "table"
+                ]
+                .copy()
+            )
+
+            percentage_columns = [
+                column
+                for column
+                in display_comparison.columns
+                if "Percentage"
+                in column
+            ]
+
+            for column in (
+                percentage_columns
+            ):
+
+                display_comparison[
+                    column
+                ] = (
+                    display_comparison[
+                        column
+                    ]
+                    .round(1)
+                )
+
+            st.dataframe(
+                display_comparison,
+                use_container_width=True,
+                hide_index=True
+            )
+
+        if (
+            not saved_comparison[
+                "current_other_df"
+            ].empty
+        ):
+
+            with st.expander(
+                f"🔎 "
+                f"{saved_comparison['current_label']} "
+                f"— Lainnya"
+            ):
+
+                st.dataframe(
+                    saved_comparison[
+                        "current_other_df"
+                    ],
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+        if (
+            not saved_comparison[
+                "comparison_other_df"
+            ].empty
+        ):
+
+            with st.expander(
+                f"🔎 "
+                f"{saved_comparison['comparison_label']} "
+                f"— Lainnya"
+            ):
+
+                st.dataframe(
+                    saved_comparison[
+                        "comparison_other_df"
+                    ],
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+    # ========================================================
+    # OPEN FEEDBACK
+    # ========================================================
 
     st.divider()
 
     st.subheader(
         "💬 Open Feedback"
-    )
-
-    st.caption(
-        "Open-ended suggestions and feedback "
-        "from respondents."
     )
 
     feedback_list = []
@@ -3287,17 +3792,9 @@ elif selected_step == "📈 Analyze Result":
         if item is None:
             continue
 
-        if (
-            str(
-                item.get(
-                    "type",
-                    ""
-                )
-            )
-            .strip()
-            .lower()
-            != "open"
-        ):
+        if item[
+            "type"
+        ] != "Open":
             continue
 
         if not item.get(
@@ -3377,37 +3874,13 @@ elif selected_step == "📈 Analyze Result":
             )
         )
 
-        st.caption(
-            f"{len(final_feedback_df):,} "
-            f"open feedback response(s)"
-        )
-
         feedback_html = (
             '<div class="feedback-container">'
         )
 
         for index, row in (
-            final_feedback_df
-            .iterrows()
+            final_feedback_df.iterrows()
         ):
-
-            question_text = (
-                str(
-                    row[
-                        "Question"
-                    ]
-                )
-                .strip()
-            )
-
-            feedback_text = (
-                str(
-                    row[
-                        "Open Feedback"
-                    ]
-                )
-                .strip()
-            )
 
             feedback_html += f"""
             <div class="feedback-card">
@@ -3417,11 +3890,11 @@ elif selected_step == "📈 Analyze Result":
                 </div>
 
                 <div class="feedback-question">
-                    {question_text}
+                    {row["Question"]}
                 </div>
 
                 <div class="feedback-text">
-                    {feedback_text}
+                    {row["Open Feedback"]}
                 </div>
 
             </div>
@@ -3450,11 +3923,6 @@ elif selected_step == "📥 Download":
         "📥 Download Result"
     )
 
-    st.caption(
-        "Export your cleaned dataset and analysis "
-        "into one Excel workbook."
-    )
-
     def generate_excel():
 
         output = (
@@ -3478,33 +3946,25 @@ elif selected_step == "📥 Download":
             engine="openpyxl"
         ) as writer:
 
-            raw_export_df = (
-                prepare_excel_df(
-                    raw_df
-                )
-            )
+            # =================================================
+            # RAW DATA
+            # =================================================
 
-            raw_export_df.to_excel(
+            prepare_excel_df(
+                raw_df
+            ).to_excel(
                 writer,
                 sheet_name=
                     "1_Raw_Data",
                 index=False
             )
 
+            # =================================================
+            # VARIABLE ANALYSIS
+            # =================================================
+
             variable_sheet = (
                 "2_Variable_Analysis"
-            )
-
-            pd.DataFrame(
-                {
-                    "Question":
-                        []
-                }
-            ).to_excel(
-                writer,
-                sheet_name=
-                    variable_sheet,
-                index=False
             )
 
             row_position = 0
@@ -3550,14 +4010,12 @@ elif selected_step == "📥 Download":
                                 [
                                     question
                                 ],
-
                             "Type":
                                 [
                                     result[
                                         "type"
                                     ]
                                 ],
-
                             "Base N":
                                 [
                                     result[
@@ -3579,7 +4037,7 @@ elif selected_step == "📥 Download":
 
                 row_position += 2
 
-                export_df = (
+                result_df = (
                     prepare_excel_df(
                         result[
                             "result"
@@ -3587,28 +4045,25 @@ elif selected_step == "📥 Download":
                     )
                 )
 
-                if not export_df.empty:
+                if (
+                    "Percentage"
+                    in result_df.columns
+                ):
 
-                    if (
+                    result_df[
                         "Percentage"
-                        in export_df.columns
-                    ):
-
-                        export_df[
+                    ] = (
+                        result_df[
                             "Percentage"
-                        ] = (
-                            pd.to_numeric(
-                                export_df[
-                                    "Percentage"
-                                ],
-                                errors="coerce"
-                            )
-                            .apply(
-                                percentage_to_text
-                            )
+                        ]
+                        .apply(
+                            percentage_to_text
                         )
+                    )
 
-                    export_df.to_excel(
+                if not result_df.empty:
+
+                    result_df.to_excel(
                         writer,
                         sheet_name=
                             variable_sheet,
@@ -3619,25 +4074,17 @@ elif selected_step == "📥 Download":
 
                     row_position += (
                         len(
-                            export_df
+                            result_df
                         )
                         + 3
                     )
 
+            # =================================================
+            # CROSSTAB
+            # =================================================
+
             crosstab_sheet = (
                 "3_Crosstab"
-            )
-
-            pd.DataFrame(
-                {
-                    "Crosstab":
-                        []
-                }
-            ).to_excel(
-                writer,
-                sheet_name=
-                    crosstab_sheet,
-                index=False
             )
 
             row_position = 0
@@ -3648,66 +4095,6 @@ elif selected_step == "📥 Download":
                 ]
             ):
 
-                title = (
-                    item.get(
-                        "name",
-                        f"Crosstab {index + 1}"
-                    )
-                )
-
-                pd.DataFrame(
-                    {
-                        "Crosstab":
-                            [
-                                title
-                            ]
-                    }
-                ).to_excel(
-                    writer,
-                    sheet_name=
-                        crosstab_sheet,
-                    startrow=
-                        row_position,
-                    index=False
-                )
-
-                row_position += 2
-
-                pd.DataFrame(
-                    {
-                        "Row Variable":
-                            [
-                                item[
-                                    "row_question"
-                                ]
-                            ],
-
-                        "Column Variable":
-                            [
-                                item[
-                                    "column_question"
-                                ]
-                            ],
-
-                        "Chart Type":
-                            [
-                                item.get(
-                                    "chart_type",
-                                    "Grouped Bar"
-                                )
-                            ]
-                    }
-                ).to_excel(
-                    writer,
-                    sheet_name=
-                        crosstab_sheet,
-                    startrow=
-                        row_position,
-                    index=False
-                )
-
-                row_position += 2
-
                 result = (
                     item[
                         "result"
@@ -3716,6 +4103,24 @@ elif selected_step == "📥 Download":
 
                 pd.DataFrame(
                     {
+                        "Crosstab":
+                            [
+                                item[
+                                    "name"
+                                ]
+                            ],
+                        "Row":
+                            [
+                                item[
+                                    "row_question"
+                                ]
+                            ],
+                        "Column":
+                            [
+                                item[
+                                    "column_question"
+                                ]
+                            ],
                         "Base N":
                             [
                                 result[
@@ -3735,53 +4140,29 @@ elif selected_step == "📥 Download":
                 row_position += 2
 
                 absolute_df = (
-                    result[
-                        "absolute"
-                    ]
-                    .reset_index()
+                    prepare_excel_df(
+                        result[
+                            "absolute"
+                        ]
+                        .reset_index()
+                    )
                 )
 
-                absolute_df = (
-                    prepare_excel_df(
+                absolute_df.to_excel(
+                    writer,
+                    sheet_name=
+                        crosstab_sheet,
+                    startrow=
+                        row_position,
+                    index=False
+                )
+
+                row_position += (
+                    len(
                         absolute_df
                     )
+                    + 2
                 )
-
-                if not absolute_df.empty:
-
-                    pd.DataFrame(
-                        {
-                            "Result Type":
-                                [
-                                    "Absolute"
-                                ]
-                        }
-                    ).to_excel(
-                        writer,
-                        sheet_name=
-                            crosstab_sheet,
-                        startrow=
-                            row_position,
-                        index=False
-                    )
-
-                    row_position += 1
-
-                    absolute_df.to_excel(
-                        writer,
-                        sheet_name=
-                            crosstab_sheet,
-                        startrow=
-                            row_position,
-                        index=False
-                    )
-
-                    row_position += (
-                        len(
-                            absolute_df
-                        )
-                        + 2
-                    )
 
                 percentage_df = (
                     result[
@@ -3799,58 +4180,35 @@ elif selected_step == "📥 Download":
                     percentage_df[
                         column
                     ] = (
-                        pd.to_numeric(
-                            percentage_df[
-                                column
-                            ],
-                            errors="coerce"
-                        )
+                        percentage_df[
+                            column
+                        ]
                         .apply(
                             percentage_to_text
                         )
                     )
 
-                percentage_df = (
-                    prepare_excel_df(
-                        percentage_df
-                    )
+                prepare_excel_df(
+                    percentage_df
+                ).to_excel(
+                    writer,
+                    sheet_name=
+                        crosstab_sheet,
+                    startrow=
+                        row_position,
+                    index=False
                 )
 
-                if not percentage_df.empty:
-
-                    pd.DataFrame(
-                        {
-                            "Result Type":
-                                [
-                                    "Percentage"
-                                ]
-                        }
-                    ).to_excel(
-                        writer,
-                        sheet_name=
-                            crosstab_sheet,
-                        startrow=
-                            row_position,
-                        index=False
+                row_position += (
+                    len(
+                        percentage_df
                     )
+                    + 3
+                )
 
-                    row_position += 1
-
-                    percentage_df.to_excel(
-                        writer,
-                        sheet_name=
-                            crosstab_sheet,
-                        startrow=
-                            row_position,
-                        index=False
-                    )
-
-                    row_position += (
-                        len(
-                            percentage_df
-                        )
-                        + 3
-                    )
+            # =================================================
+            # OPEN FEEDBACK
+            # =================================================
 
             feedback_list = []
 
@@ -3881,7 +4239,6 @@ elif selected_step == "📥 Download":
                         False
                     )
                 ):
-
                     continue
 
                 filtered_df = (
@@ -3935,6 +4292,10 @@ elif selected_step == "📥 Download":
                 index=False
             )
 
+            # =================================================
+            # OTHER RESPONSES
+            # =================================================
+
             other_results = []
 
             for question in (
@@ -3953,37 +4314,14 @@ elif selected_step == "📥 Download":
                 if item is None:
                     continue
 
-                if (
-                    item.get(
-                        "type"
-                    )
-                    != "MA"
-                ):
+                if item[
+                    "type"
+                ] != "MA":
                     continue
-
-                if (
-                    "Lainnya"
-                    not in item.get(
-                        "options",
-                        []
-                    )
-                ):
-                    continue
-
-                filtered_df = (
-                    get_filtered_df(
-                        export_analysis_df,
-                        question,
-                        metadata,
-                        st.session_state[
-                            "applied_routing_config"
-                        ]
-                    )
-                )
 
                 other_df = (
                     collect_ma_other_details(
-                        filtered_df,
+                        export_analysis_df,
                         item
                     )
                 )
@@ -4032,6 +4370,52 @@ elif selected_step == "📥 Download":
                 index=False
             )
 
+            # =================================================
+            # COMPARISON
+            # =================================================
+
+            if (
+                st.session_state[
+                    "comparison_result"
+                ]
+            ):
+
+                comparison_export = (
+                    st.session_state[
+                        "comparison_result"
+                    ][
+                        "table"
+                    ]
+                    .copy()
+                )
+
+                for column in (
+                    comparison_export.columns
+                ):
+
+                    if (
+                        "Percentage"
+                        in column
+                    ):
+
+                        comparison_export[
+                            column
+                        ] = (
+                            comparison_export[
+                                column
+                            ]
+                            .apply(
+                                percentage_to_text
+                            )
+                        )
+
+                comparison_export.to_excel(
+                    writer,
+                    sheet_name=
+                        "6_Comparison",
+                    index=False
+                )
+
         output.seek(0)
 
         return output
@@ -4043,33 +4427,24 @@ elif selected_step == "📥 Download":
             generate_excel()
         )
 
-        st.success(
-            "Your Excel report is ready."
-        )
-
         st.download_button(
             "⬇️ Download Excel Result",
-
             data=
                 excel_file,
-
             file_name=
                 "survey_analysis_result.xlsx",
-
             mime=(
                 "application/"
                 "vnd.openxmlformats-officedocument."
                 "spreadsheetml.sheet"
             ),
-
             type="primary",
-
             use_container_width=True
         )
 
     except Exception as error:
 
         st.error(
-            f"Failed to generate Excel report: "
+            f"Failed to generate report: "
             f"{error}"
         )
