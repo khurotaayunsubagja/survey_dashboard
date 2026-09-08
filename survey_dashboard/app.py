@@ -496,16 +496,12 @@ def make_widget_key(
     digest = (
         hashlib.md5(
             str(value)
-            .encode(
-                "utf-8"
-            )
+            .encode("utf-8")
         )
         .hexdigest()[:10]
     )
 
-    return (
-        f"{prefix}_{digest}"
-    )
+    return f"{prefix}_{digest}"
 
 
 def get_sheet_names(
@@ -756,9 +752,7 @@ def render_variable_chart(
                 ),
 
                 color=alt.value(
-                    CHART_COLORS[
-                        0
-                    ]
+                    CHART_COLORS[0]
                 ),
 
                 tooltip=[
@@ -766,11 +760,13 @@ def render_variable_chart(
                         "Option:N",
                         title="Option"
                     ),
+
                     alt.Tooltip(
                         "Absolute:Q",
                         title="Absolute",
                         format=",.0f"
                     ),
+
                     alt.Tooltip(
                         "Percentage:Q",
                         title="Percentage",
@@ -814,10 +810,7 @@ def render_variable_chart(
         ).properties(
             height=max(
                 200,
-                len(
-                    chart_df
-                )
-                * 36
+                len(chart_df) * 36
             )
         )
 
@@ -883,9 +876,7 @@ def render_crosstab_chart(
     )
 
     first_column = (
-        chart_df.columns[
-            0
-        ]
+        chart_df.columns[0]
     )
 
     chart_df = (
@@ -912,10 +903,6 @@ def render_crosstab_chart(
     )
 
 
-    # ========================================================
-    # STACKED
-    # ========================================================
-
     if chart_type == "Stacked Bar":
 
         chart = (
@@ -935,7 +922,6 @@ def render_crosstab_chart(
                 y=alt.Y(
                     "Row Option:N",
                     title=None,
-
                     axis=alt.Axis(
                         labelLimit=400
                     )
@@ -944,7 +930,6 @@ def render_crosstab_chart(
                 color=alt.Color(
                     "Column Option:N",
                     title=None,
-
                     scale=alt.Scale(
                         range=
                             CHART_COLORS
@@ -956,10 +941,12 @@ def render_crosstab_chart(
                         "Row Option:N",
                         title="Row"
                     ),
+
                     alt.Tooltip(
                         "Column Option:N",
                         title="Column"
                     ),
+
                     alt.Tooltip(
                         "Percentage:Q",
                         title="Percentage",
@@ -970,18 +957,11 @@ def render_crosstab_chart(
             .properties(
                 height=max(
                     250,
-                    percentage_df.shape[
-                        0
-                    ]
-                    * 48
+                    percentage_df.shape[0] * 48
                 )
             )
         )
 
-
-    # ========================================================
-    # GROUPED
-    # ========================================================
 
     else:
 
@@ -1001,7 +981,6 @@ def render_crosstab_chart(
                 y=alt.Y(
                     "Row Option:N",
                     title=None,
-
                     axis=alt.Axis(
                         labelLimit=400
                     )
@@ -1013,7 +992,6 @@ def render_crosstab_chart(
                 color=alt.Color(
                     "Column Option:N",
                     title=None,
-
                     scale=alt.Scale(
                         range=
                             CHART_COLORS
@@ -1025,10 +1003,12 @@ def render_crosstab_chart(
                         "Row Option:N",
                         title="Row"
                     ),
+
                     alt.Tooltip(
                         "Column Option:N",
                         title="Column"
                     ),
+
                     alt.Tooltip(
                         "Percentage:Q",
                         title="Percentage",
@@ -1039,10 +1019,7 @@ def render_crosstab_chart(
             .properties(
                 height=max(
                     250,
-                    percentage_df.shape[
-                        0
-                    ]
-                    * 48
+                    percentage_df.shape[0] * 48
                 )
             )
         )
@@ -1084,7 +1061,7 @@ def render_crosstab_chart(
 
 
 # ============================================================
-# BUILD MULTI COMPARISON
+# BUILD MULTI DATASET COMPARISON
 # ============================================================
 
 def build_multi_comparison_df(
@@ -1312,7 +1289,7 @@ def build_multi_comparison_df(
 
 
 # ============================================================
-# MULTI COMPARISON CHART
+# MULTI DATASET COMPARISON CHART
 # ============================================================
 
 def render_multi_comparison_chart(
@@ -1547,7 +1524,7 @@ def render_multi_comparison_chart(
 
 
     # ========================================================
-    # LABEL
+    # DATA LABEL
     # ========================================================
 
     labels = (
@@ -2412,8 +2389,8 @@ elif selected_step == "🔍 Duplicate":
 
 
     st.caption(
-        "Duplicate detection dapat dilakukan "
-        "berdasarkan seluruh pertanyaan/kolom."
+        "Duplicate detection can be performed "
+        "using any variable in the dataset."
     )
 
 
@@ -2903,7 +2880,7 @@ elif selected_step == "🔀 Routing":
 
 
     # ========================================================
-    # RESTORE
+    # RESTORE VARIABLE
     # ========================================================
 
     if (
@@ -3012,7 +2989,7 @@ elif selected_step == "🔀 Routing":
 
 
         # ====================================================
-        # OLD STYLE BADGE + SMALL REMOVE BUTTON
+        # BADGE + REMOVE
         # ====================================================
 
         col1, col2 = (
@@ -3110,7 +3087,7 @@ elif selected_step == "🔀 Routing":
 
 
         # ====================================================
-        # BASE OPTIONS
+        # BASE VARIABLE
         # ====================================================
 
         base_options = (
@@ -3832,7 +3809,7 @@ elif selected_step == "📈 Analyze Result":
                     if not other_df.empty:
 
                         with st.expander(
-                            f"🔎 Lihat isi Lainnya "
+                            f"🔎 View Other Responses "
                             f"({len(other_df):,})"
                         ):
 
@@ -3984,9 +3961,13 @@ elif selected_step == "📈 Analyze Result":
     )
 
 
+    # ========================================================
+    # MAIN DATASET
+    # ========================================================
+
     current_label = (
         st.text_input(
-            "Nama Data Utama",
+            "Main Dataset Name",
 
             value=
                 st.session_state[
@@ -4032,7 +4013,7 @@ elif selected_step == "📈 Analyze Result":
     if not current_variables:
 
         st.info(
-            "No SA/MA variable available."
+            "No SA/MA variable is available for comparison."
         )
 
 
@@ -4040,7 +4021,7 @@ elif selected_step == "📈 Analyze Result":
 
         current_question = (
             st.selectbox(
-                "Variable Data Utama",
+                "Main Dataset Variable",
 
                 current_variables,
 
@@ -4065,9 +4046,13 @@ elif selected_step == "📈 Analyze Result":
         )
 
 
+        # ====================================================
+        # COMPARISON SOURCE
+        # ====================================================
+
         comparison_source = (
             st.radio(
-                "Comaprison Data Source",
+                "Comparison Data Source",
 
                 [
                     "Other Sheets in Current File",
@@ -4084,7 +4069,7 @@ elif selected_step == "📈 Analyze Result":
 
 
         # ====================================================
-        # OTHER SHEETS
+        # OTHER SHEETS IN CURRENT FILE
         # ====================================================
 
         if (
@@ -4120,7 +4105,7 @@ elif selected_step == "📈 Analyze Result":
 
             selected_comparison_sheets = (
                 st.multiselect(
-                    "Pilih Sheet Pembanding",
+                    "Select Comparison Sheets",
 
                     available_sheets,
 
@@ -4140,7 +4125,7 @@ elif selected_step == "📈 Analyze Result":
             ):
 
                 st.markdown(
-                    f"### Pembanding {index + 1}"
+                    f"### Comparison {index + 1}"
                 )
 
 
@@ -4182,15 +4167,15 @@ elif selected_step == "📈 Analyze Result":
 
 
                     comparison_variables = [
-                        item[
+                        meta[
                             "question"
                         ]
 
-                        for item
+                        for meta
                         in comparison_metadata
 
                         if (
-                            item[
+                            meta[
                                 "type"
                             ]
                             ==
@@ -4221,7 +4206,7 @@ elif selected_step == "📈 Analyze Result":
 
                         comparison_question = (
                             st.selectbox(
-                                f"Variable Pembanding {index + 1}",
+                                f"Comparison Variable {index + 1}",
 
                                 comparison_variables,
 
@@ -4254,8 +4239,8 @@ elif selected_step == "📈 Analyze Result":
                     else:
 
                         st.warning(
-                            f"Tidak ada variable "
-                            f"{current_type} pada "
+                            f"No {current_type} variable "
+                            f"is available in "
                             f"{comparison_sheet}."
                         )
 
@@ -4270,14 +4255,14 @@ elif selected_step == "📈 Analyze Result":
 
 
         # ====================================================
-        # MULTIPLE FILES
+        # UPLOAD MULTIPLE COMPARISON FILES
         # ====================================================
 
         else:
 
             comparison_files = (
                 st.file_uploader(
-                    "Upload File Pembanding",
+                    "Upload Comparison Files",
 
                     type=[
                         "xlsx",
@@ -4300,9 +4285,9 @@ elif selected_step == "📈 Analyze Result":
             ):
 
                 st.warning(
-                    "Maksimal 3 file pembanding "
-                    "karena total dataset dibatasi "
-                    "menjadi 4."
+                    "A maximum of 3 comparison files "
+                    "can be used because the dashboard "
+                    "supports up to 4 datasets in total."
                 )
 
 
@@ -4321,13 +4306,13 @@ elif selected_step == "📈 Analyze Result":
             ):
 
                 st.markdown(
-                    f"### Pembanding {index + 1}"
+                    f"### Comparison {index + 1}"
                 )
 
 
                 comparison_platform = (
                     st.selectbox(
-                        f"Platform Pembanding {index + 1}",
+                        f"Comparison Platform {index + 1}",
 
                         [
                             "SurveyMonkey",
@@ -4370,7 +4355,7 @@ elif selected_step == "📈 Analyze Result":
 
                     comparison_sheet = (
                         st.selectbox(
-                            f"Sheet Pembanding {index + 1}",
+                            f"Comparison Sheet {index + 1}",
 
                             comparison_sheets,
 
@@ -4412,15 +4397,15 @@ elif selected_step == "📈 Analyze Result":
 
 
                     comparison_variables = [
-                        item[
+                        meta[
                             "question"
                         ]
 
-                        for item
+                        for meta
                         in comparison_metadata
 
                         if (
-                            item[
+                            meta[
                                 "type"
                             ]
                             ==
@@ -4451,7 +4436,7 @@ elif selected_step == "📈 Analyze Result":
 
                         comparison_question = (
                             st.selectbox(
-                                f"Variable Pembanding {index + 1}",
+                                f"Comparison Variable {index + 1}",
 
                                 comparison_variables,
 
@@ -4484,8 +4469,8 @@ elif selected_step == "📈 Analyze Result":
                     else:
 
                         st.warning(
-                            f"Tidak ada variable "
-                            f"{current_type} pada "
+                            f"No {current_type} variable "
+                            f"is available in "
                             f"{comparison_file.name}."
                         )
 
@@ -4533,15 +4518,15 @@ elif selected_step == "📈 Analyze Result":
             if not comparison_configs:
 
                 st.warning(
-                    "Tambahkan minimal satu "
-                    "data pembanding."
+                    "Please add at least one "
+                    "comparison dataset."
                 )
 
 
             elif not current_label.strip():
 
                 st.warning(
-                    "Nama data utama tidak boleh kosong."
+                    "Main Dataset Name cannot be empty."
                 )
 
 
@@ -4570,7 +4555,7 @@ elif selected_step == "📈 Analyze Result":
                 ):
 
                     st.warning(
-                        "Nama dataset tidak boleh kosong."
+                        "Dataset names cannot be empty."
                     )
 
 
@@ -4589,7 +4574,7 @@ elif selected_step == "📈 Analyze Result":
                 ):
 
                     st.warning(
-                        "Nama setiap dataset harus berbeda."
+                        "Each dataset must have a unique name."
                     )
 
 
@@ -4715,7 +4700,7 @@ elif selected_step == "📈 Analyze Result":
 
 
         # ====================================================
-        # DISPLAY COMPARISON
+        # DISPLAY COMPARISON RESULT
         # ====================================================
 
         saved_comparison = (
@@ -4803,10 +4788,10 @@ elif selected_step == "📈 Analyze Result":
             ):
 
                 st.caption(
-                    "Catatan: pada MA, satu responden "
-                    "dapat memilih lebih dari satu opsi, "
-                    "sehingga total persentase dapat "
-                    "melebihi 100%."
+                    "Note: for Multiple Answer variables, "
+                    "one respondent may select more than one option. "
+                    "Therefore, the total stacked percentage "
+                    "may exceed 100%."
                 )
 
 
@@ -5131,9 +5116,7 @@ elif selected_step == "📥 Download":
             )
 
 
-            row_position = (
-                0
-            )
+            row_position = 0
 
 
             for question in (
@@ -5279,9 +5262,7 @@ elif selected_step == "📥 Download":
             )
 
 
-            row_position = (
-                0
-            )
+            row_position = 0
 
 
             for item in (
