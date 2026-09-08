@@ -3,7 +3,7 @@ import re
 
 
 # ============================================================
-# GENERAL HELPERS
+# METADATA
 # ============================================================
 
 def get_question_metadata(
@@ -13,23 +13,34 @@ def get_question_metadata(
 
     for item in metadata:
 
-        if item[
-            "question"
-        ] == question:
+        if (
+            item[
+                "question"
+            ]
+            == question
+        ):
 
             return item
 
     return None
 
 
-def normalize_text(value):
+# ============================================================
+# TEXT NORMALIZATION
+# ============================================================
+
+def normalize_text(
+    value
+):
 
     if pd.isna(value):
         return ""
 
-    text = str(
-        value
-    ).lower()
+    text = (
+        str(value)
+        .strip()
+        .lower()
+    )
 
     text = re.sub(
         r"\s+",
@@ -37,11 +48,11 @@ def normalize_text(value):
         text
     )
 
-    return text.strip()
+    return text
 
 
 # ============================================================
-# GLOBAL FILTERING
+# GLOBAL FILTER
 # ============================================================
 
 def apply_global_filters(
@@ -89,9 +100,17 @@ def apply_global_filters(
         if item is None:
             continue
 
-        if item[
-            "type"
-        ] == "SA":
+
+        # ====================================================
+        # SA
+        # ====================================================
+
+        if (
+            item[
+                "type"
+            ]
+            == "SA"
+        ):
 
             column = (
                 item[
@@ -102,7 +121,7 @@ def apply_global_filters(
             if column not in filtered_df.columns:
                 continue
 
-            series = (
+            values = (
                 filtered_df[
                     column
                 ]
@@ -113,7 +132,7 @@ def apply_global_filters(
 
             filtered_df = (
                 filtered_df[
-                    series.isin(
+                    values.isin(
                         [
                             str(value)
                             for value
@@ -124,27 +143,35 @@ def apply_global_filters(
                 .copy()
             )
 
-        elif item[
-            "type"
-        ] == "MA":
+
+        # ====================================================
+        # MA
+        # ====================================================
+
+        elif (
+            item[
+                "type"
+            ]
+            == "MA"
+        ):
 
             options = (
-                item[
-                    "options"
-                ]
+                item.get(
+                    "options",
+                    []
+                )
             )
 
             internal_columns = (
-                item[
-                    "internal_columns"
-                ]
+                item.get(
+                    "internal_columns",
+                    []
+                )
             )
 
             selected_columns = []
 
-            for value in (
-                selected_values
-            ):
+            for value in selected_values:
 
                 if value not in options:
                     continue
@@ -157,7 +184,8 @@ def apply_global_filters(
 
                 if (
                     option_index
-                    >= len(
+                    >=
+                    len(
                         internal_columns
                     )
                 ):
@@ -214,17 +242,21 @@ def get_filtered_df(
     routing_config
 ):
 
-    if not routing_config:
-        return df.copy()
+    filtered_df = (
+        df.copy()
+    )
 
-    if question not in routing_config:
-        return df.copy()
+    if not routing_config:
+        return filtered_df
 
     config = (
-        routing_config[
+        routing_config.get(
             question
-        ]
+        )
     )
+
+    if not config:
+        return filtered_df
 
     base_question = (
         config.get(
@@ -248,33 +280,41 @@ def get_filtered_df(
         not selected_values
     ):
 
-        return df.copy()
+        return filtered_df
 
-    base_metadata = (
+    base_item = (
         get_question_metadata(
             metadata,
             base_question
         )
     )
 
-    if base_metadata is None:
-        return df.copy()
+    if base_item is None:
+        return filtered_df
 
-    if base_metadata[
-        "type"
-    ] == "SA":
+
+    # ========================================================
+    # SA BASE
+    # ========================================================
+
+    if (
+        base_item[
+            "type"
+        ]
+        == "SA"
+    ):
 
         column = (
-            base_metadata[
+            base_item[
                 "source_column"
             ]
         )
 
-        if column not in df.columns:
-            return df.copy()
+        if column not in filtered_df.columns:
+            return filtered_df
 
-        series = (
-            df[
+        values = (
+            filtered_df[
                 column
             ]
             .fillna("")
@@ -283,8 +323,8 @@ def get_filtered_df(
         )
 
         return (
-            df[
-                series.isin(
+            filtered_df[
+                values.isin(
                     [
                         str(value)
                         for value
@@ -295,20 +335,30 @@ def get_filtered_df(
             .copy()
         )
 
-    if base_metadata[
-        "type"
-    ] == "MA":
+
+    # ========================================================
+    # MA BASE
+    # ========================================================
+
+    if (
+        base_item[
+            "type"
+        ]
+        == "MA"
+    ):
 
         options = (
-            base_metadata[
-                "options"
-            ]
+            base_item.get(
+                "options",
+                []
+            )
         )
 
         internal_columns = (
-            base_metadata[
-                "internal_columns"
-            ]
+            base_item.get(
+                "internal_columns",
+                []
+            )
         )
 
         selected_columns = []
@@ -324,8 +374,12 @@ def get_filtered_df(
                 )
             )
 
-            if index >= len(
-                internal_columns
+            if (
+                index
+                >=
+                len(
+                    internal_columns
+                )
             ):
                 continue
 
@@ -335,17 +389,17 @@ def get_filtered_df(
                 ]
             )
 
-            if column in df.columns:
+            if column in filtered_df.columns:
 
                 selected_columns.append(
                     column
                 )
 
         if not selected_columns:
-            return df.copy()
+            return filtered_df
 
         mask = (
-            df[
+            filtered_df[
                 selected_columns
             ]
             .apply(
@@ -360,13 +414,13 @@ def get_filtered_df(
         )
 
         return (
-            df[
+            filtered_df[
                 mask
             ]
             .copy()
         )
 
-    return df.copy()
+    return filtered_df
 
 
 # ============================================================
@@ -390,18 +444,10 @@ def calculate_variable_analysis(
         ]
     )
 
-    if question_type == "Contact":
 
-        return {
-            "question":
-                question,
-            "type":
-                "Contact",
-            "base_n":
-                0,
-            "result":
-                pd.DataFrame()
-        }
+    # ========================================================
+    # SA
+    # ========================================================
 
     if question_type == "SA":
 
@@ -416,10 +462,13 @@ def calculate_variable_analysis(
             return {
                 "question":
                     question,
+
                 "type":
                     "SA",
+
                 "base_n":
                     0,
+
                 "result":
                     pd.DataFrame()
             }
@@ -440,9 +489,7 @@ def calculate_variable_analysis(
         )
 
         base_n = (
-            len(
-                series
-            )
+            len(series)
         )
 
         result = (
@@ -452,8 +499,7 @@ def calculate_variable_analysis(
                 "Option"
             )
             .reset_index(
-                name=
-                    "Absolute"
+                name="Absolute"
             )
         )
 
@@ -465,33 +511,45 @@ def calculate_variable_analysis(
             ]
             / base_n
             * 100
+
             if base_n > 0
+
             else 0
         )
 
         return {
             "question":
                 question,
+
             "type":
                 "SA",
+
             "base_n":
                 base_n,
+
             "result":
                 result
         }
 
+
+    # ========================================================
+    # MA
+    # ========================================================
+
     if question_type == "MA":
 
         options = (
-            metadata_item[
-                "options"
-            ]
+            metadata_item.get(
+                "options",
+                []
+            )
         )
 
         internal_columns = (
-            metadata_item[
-                "internal_columns"
-            ]
+            metadata_item.get(
+                "internal_columns",
+                []
+            )
         )
 
         valid_columns = [
@@ -532,8 +590,12 @@ def calculate_variable_analysis(
             options
         ):
 
-            if index >= len(
-                internal_columns
+            if (
+                index
+                >=
+                len(
+                    internal_columns
+                )
             ):
                 continue
 
@@ -567,7 +629,9 @@ def calculate_variable_analysis(
                 absolute
                 / base_n
                 * 100
+
                 if base_n > 0
+
                 else 0
             )
 
@@ -575,8 +639,10 @@ def calculate_variable_analysis(
                 {
                     "Option":
                         option,
+
                     "Absolute":
                         absolute,
+
                     "Percentage":
                         percentage
                 }
@@ -585,15 +651,23 @@ def calculate_variable_analysis(
         return {
             "question":
                 question,
+
             "type":
                 "MA",
+
             "base_n":
                 base_n,
+
             "result":
                 pd.DataFrame(
                     rows
                 )
         }
+
+
+    # ========================================================
+    # OPEN
+    # ========================================================
 
     if question_type == "Open":
 
@@ -608,10 +682,13 @@ def calculate_variable_analysis(
             return {
                 "question":
                     question,
+
                 "type":
                     "Open",
+
                 "base_n":
                     0,
+
                 "result":
                     pd.DataFrame()
             }
@@ -634,12 +711,13 @@ def calculate_variable_analysis(
         return {
             "question":
                 question,
+
             "type":
                 "Open",
+
             "base_n":
-                len(
-                    series
-                ),
+                len(series),
+
             "result":
                 pd.DataFrame(
                     {
@@ -649,13 +727,17 @@ def calculate_variable_analysis(
                 )
         }
 
+
     return {
         "question":
             question,
+
         "type":
             question_type,
+
         "base_n":
             0,
+
         "result":
             pd.DataFrame()
     }
@@ -704,17 +786,6 @@ def calculate_crosstab(
         ]
     )
 
-    if row_column not in df.columns:
-
-        return {
-            "absolute":
-                pd.DataFrame(),
-            "percentage":
-                pd.DataFrame(),
-            "base_n":
-                0
-        }
-
     row_series = (
         df[
             row_column
@@ -725,8 +796,7 @@ def calculate_crosstab(
     )
 
     valid_row = (
-        row_series
-        != ""
+        row_series != ""
     )
 
     working_df = (
@@ -742,6 +812,11 @@ def calculate_crosstab(
         ]
     )
 
+
+    # ========================================================
+    # SA × SA
+    # ========================================================
+
     if column_type == "SA":
 
         column = (
@@ -749,17 +824,6 @@ def calculate_crosstab(
                 "source_column"
             ]
         )
-
-        if column not in working_df.columns:
-
-            return {
-                "absolute":
-                    pd.DataFrame(),
-                "percentage":
-                    pd.DataFrame(),
-                "base_n":
-                    0
-            }
 
         column_series = (
             working_df[
@@ -770,20 +834,19 @@ def calculate_crosstab(
             .str.strip()
         )
 
-        valid_column = (
-            column_series
-            != ""
+        valid = (
+            column_series != ""
         )
 
         row_valid = (
             row_series[
-                valid_column.values
+                valid.values
             ]
         )
 
         column_valid = (
             column_series[
-                valid_column
+                valid
             ]
         )
 
@@ -814,23 +877,28 @@ def calculate_crosstab(
         )
 
         base_n = (
-            len(
-                row_valid
-            )
+            len(row_valid)
         )
+
+
+    # ========================================================
+    # SA × MA
+    # ========================================================
 
     else:
 
         options = (
-            column_metadata[
-                "options"
-            ]
+            column_metadata.get(
+                "options",
+                []
+            )
         )
 
         internal_columns = (
-            column_metadata[
-                "internal_columns"
-            ]
+            column_metadata.get(
+                "internal_columns",
+                []
+            )
         )
 
         row_options = (
@@ -842,10 +910,8 @@ def calculate_crosstab(
         absolute = (
             pd.DataFrame(
                 0,
-                index=
-                    row_options,
-                columns=
-                    options,
+                index=row_options,
+                columns=options,
                 dtype=int
             )
         )
@@ -865,7 +931,8 @@ def calculate_crosstab(
 
             if (
                 option_index
-                >= len(
+                >=
+                len(
                     internal_columns
                 )
             ):
@@ -890,13 +957,12 @@ def calculate_crosstab(
                 .fillna(0)
             )
 
-            for row_option in (
-                row_options
-            ):
+            for row_option in row_options:
 
                 mask = (
                     row_series
-                    == row_option
+                    ==
+                    row_option
                 )
 
                 absolute.loc[
@@ -946,8 +1012,10 @@ def calculate_crosstab(
     return {
         "absolute":
             absolute,
+
         "percentage":
             percentage,
+
         "base_n":
             base_n
     }
@@ -963,15 +1031,22 @@ def collect_open_feedback(
 ):
 
     if (
-        metadata_item[
+        metadata_item.get(
             "type"
-        ]
-        != "Open"
-        or
-        not metadata_item.get(
-            "is_feedback",
-            False
         )
+        != "Open"
+    ):
+
+        return pd.DataFrame(
+            columns=[
+                "Question",
+                "Open Feedback"
+            ]
+        )
+
+    if not metadata_item.get(
+        "is_feedback",
+        False
     ):
 
         return pd.DataFrame(
@@ -982,12 +1057,16 @@ def collect_open_feedback(
         )
 
     column = (
-        metadata_item[
+        metadata_item.get(
             "source_column"
-        ]
+        )
     )
 
-    if column not in df.columns:
+    if (
+        column is None
+        or
+        column not in df.columns
+    ):
 
         return pd.DataFrame(
             columns=[
@@ -1017,6 +1096,7 @@ def collect_open_feedback(
                 metadata_item[
                     "question"
                 ],
+
             "Open Feedback":
                 series.values
         }
@@ -1032,9 +1112,12 @@ def collect_ma_other_details(
     metadata_item
 ):
 
-    if metadata_item.get(
-        "type"
-    ) != "MA":
+    if (
+        metadata_item.get(
+            "type"
+        )
+        != "MA"
+    ):
 
         return pd.DataFrame(
             columns=[
@@ -1084,10 +1167,12 @@ def collect_ma_other_details(
 
 
 # ============================================================
-# CONTACT DUPLICATES
+# CONTACT NORMALIZATION
 # ============================================================
 
-def normalize_contact(value):
+def normalize_contact(
+    value
+):
 
     if pd.isna(value):
         return ""
@@ -1095,73 +1180,280 @@ def normalize_contact(value):
     text = re.sub(
         r"\D",
         "",
-        str(
-            value
-        )
+        str(value)
     )
 
-    if text.startswith(
-        "62"
+    if (
+        text.startswith(
+            "62"
+        )
     ):
 
         text = (
             "0"
-            + text[
-                2:
-            ]
+            +
+            text[2:]
         )
 
     return text
 
 
-def detect_contact_duplicates(
+# ============================================================
+# GENERIC DUPLICATE DETECTION
+# ============================================================
+
+def detect_duplicates(
     df,
     metadata_item
 ):
 
-    if metadata_item[
-        "type"
-    ] != "Contact":
+    if metadata_item is None:
 
         return pd.DataFrame()
 
-    column = (
-        metadata_item[
-            "source_column"
-        ]
+    question_type = (
+        metadata_item.get(
+            "type"
+        )
     )
 
-    if column not in df.columns:
-        return pd.DataFrame()
+    question = (
+        metadata_item.get(
+            "question",
+            ""
+        )
+    )
 
     working = (
         pd.DataFrame(
-            {
-                "_original_index":
-                    df.index,
-                "Contact":
-                    df[
-                        column
-                    ]
-            }
+            index=df.index
         )
     )
 
     working[
-        "_normalized_contact"
+        "_original_index"
+    ] = df.index
+
+
+    # ========================================================
+    # CONTACT
+    # ========================================================
+
+    if question_type == "Contact":
+
+        column = (
+            metadata_item.get(
+                "source_column"
+            )
+        )
+
+        if (
+            column is None
+            or
+            column not in df.columns
+        ):
+
+            return pd.DataFrame()
+
+        working[
+            "Value"
+        ] = (
+            df[
+                column
+            ]
+        )
+
+        working[
+            "_duplicate_key"
+        ] = (
+            working[
+                "Value"
+            ]
+            .apply(
+                normalize_contact
+            )
+        )
+
+
+    # ========================================================
+    # SA / OPEN
+    # ========================================================
+
+    elif question_type in [
+        "SA",
+        "Open"
+    ]:
+
+        column = (
+            metadata_item.get(
+                "source_column"
+            )
+        )
+
+        if (
+            column is None
+            or
+            column not in df.columns
+        ):
+
+            return pd.DataFrame()
+
+        working[
+            "Value"
+        ] = (
+            df[
+                column
+            ]
+        )
+
+        working[
+            "_duplicate_key"
+        ] = (
+            working[
+                "Value"
+            ]
+            .apply(
+                normalize_text
+            )
+        )
+
+
+    # ========================================================
+    # MA
+    # ========================================================
+
+    elif question_type == "MA":
+
+        options = (
+            metadata_item.get(
+                "options",
+                []
+            )
+        )
+
+        internal_columns = (
+            metadata_item.get(
+                "internal_columns",
+                []
+            )
+        )
+
+        valid_pairs = [
+            (
+                option,
+                column
+            )
+            for option, column
+            in zip(
+                options,
+                internal_columns
+            )
+            if column in df.columns
+        ]
+
+        if not valid_pairs:
+
+            return pd.DataFrame()
+
+        display_values = []
+        duplicate_keys = []
+
+        for row_index in df.index:
+
+            selected_options = []
+            pattern = []
+
+            for option, column in valid_pairs:
+
+                value = (
+                    pd.to_numeric(
+                        pd.Series(
+                            [
+                                df.at[
+                                    row_index,
+                                    column
+                                ]
+                            ]
+                        ),
+                        errors="coerce"
+                    )
+                    .fillna(0)
+                    .iloc[0]
+                )
+
+                selected = (
+                    1
+                    if value > 0
+                    else 0
+                )
+
+                pattern.append(
+                    str(selected)
+                )
+
+                if selected:
+
+                    selected_options.append(
+                        option
+                    )
+
+            if not selected_options:
+
+                display_values.append(
+                    ""
+                )
+
+                duplicate_keys.append(
+                    ""
+                )
+
+            else:
+
+                display_values.append(
+                    ", ".join(
+                        selected_options
+                    )
+                )
+
+                duplicate_keys.append(
+                    "|".join(
+                        pattern
+                    )
+                )
+
+        working[
+            "Value"
+        ] = display_values
+
+        working[
+            "_duplicate_key"
+        ] = duplicate_keys
+
+
+    else:
+
+        return pd.DataFrame()
+
+
+    # ========================================================
+    # REMOVE BLANK
+    # ========================================================
+
+    working[
+        "_duplicate_key"
     ] = (
         working[
-            "Contact"
+            "_duplicate_key"
         ]
-        .apply(
-            normalize_contact
-        )
+        .fillna("")
+        .astype(str)
+        .str.strip()
     )
 
     working = (
         working[
             working[
-                "_normalized_contact"
+                "_duplicate_key"
             ]
             != ""
         ]
@@ -1169,11 +1461,17 @@ def detect_contact_duplicates(
     )
 
     if working.empty:
+
         return pd.DataFrame()
+
+
+    # ========================================================
+    # DUPLICATE COUNTS
+    # ========================================================
 
     counts = (
         working[
-            "_normalized_contact"
+            "_duplicate_key"
         ]
         .value_counts()
     )
@@ -1183,18 +1481,17 @@ def detect_contact_duplicates(
             counts > 1
         ]
         .index
+        .tolist()
     )
 
-    if len(
-        duplicate_values
-    ) == 0:
+    if not duplicate_values:
 
         return pd.DataFrame()
 
     duplicate_df = (
         working[
             working[
-                "_normalized_contact"
+                "_duplicate_key"
             ]
             .isin(
                 duplicate_values
@@ -1203,9 +1500,15 @@ def detect_contact_duplicates(
         .copy()
     )
 
+
+    # ========================================================
+    # DUPLICATE GROUP
+    # ========================================================
+
     group_mapping = {
         value:
             index + 1
+
         for index, value
         in enumerate(
             duplicate_values
@@ -1216,7 +1519,7 @@ def detect_contact_duplicates(
         "Duplicate Group"
     ] = (
         duplicate_df[
-            "_normalized_contact"
+            "_duplicate_key"
         ]
         .map(
             group_mapping
@@ -1227,11 +1530,49 @@ def detect_contact_duplicates(
         "Duplicate Count"
     ] = (
         duplicate_df[
-            "_normalized_contact"
+            "_duplicate_key"
         ]
         .map(
             counts
         )
     )
 
-    return duplicate_df
+    duplicate_df[
+        "Question"
+    ] = question
+
+    return (
+        duplicate_df[
+            [
+                "_original_index",
+                "Question",
+                "Value",
+                "Duplicate Group",
+                "Duplicate Count"
+            ]
+        ]
+        .sort_values(
+            [
+                "Duplicate Group",
+                "_original_index"
+            ]
+        )
+        .reset_index(
+            drop=True
+        )
+    )
+
+
+# ============================================================
+# BACKWARD COMPATIBILITY
+# ============================================================
+
+def detect_contact_duplicates(
+    df,
+    metadata_item
+):
+
+    return detect_duplicates(
+        df,
+        metadata_item
+    )
