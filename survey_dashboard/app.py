@@ -4067,7 +4067,7 @@ elif selected_step == "📈 Analyze Result":
 
         comparison_source = (
             st.radio(
-                "Sumber Data Pembanding",
+                "Comaprison Data Source",
 
                 [
                     "Other Sheets in Current File",
@@ -4146,7 +4146,7 @@ elif selected_step == "📈 Analyze Result":
 
                 comparison_label = (
                     st.text_input(
-                        f"Nama Data Pembanding {index + 1}",
+                        f"Comparison Dataset Name {index + 1}",
 
                         value=
                             comparison_sheet,
@@ -4382,7 +4382,7 @@ elif selected_step == "📈 Analyze Result":
 
                     comparison_label = (
                         st.text_input(
-                            f"Nama Data Pembanding {index + 1}",
+                            f"Comparison Dataset Name {index + 1}",
 
                             value=
                                 comparison_sheet,
