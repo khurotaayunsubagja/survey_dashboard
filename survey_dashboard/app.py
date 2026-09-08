@@ -4006,7 +4006,7 @@ elif selected_step == "📈 Analyze Result":
 
     current_label = (
         st.text_input(
-            "Nama Data Utama",
+            "X-Label",
 
             value=
                 st.session_state[
@@ -4259,7 +4259,7 @@ elif selected_step == "📈 Analyze Result":
 
     comparison_label = (
         st.text_input(
-            "Nama Data Pembanding",
+            "X- Label",
 
             value=
                 comparison_label_default,
